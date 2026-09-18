@@ -1,6 +1,7 @@
 import { appendFile, readFile } from "node:fs/promises";
 import {
   assertAppendable,
+  type Effect,
   type EffectJournal,
   type EffectResult,
   type JournalEntry,
@@ -77,6 +78,19 @@ export class JsonlEffectJournal implements EffectJournal {
     // so a failed append leaves neither a line nor a counter behind.
     await appendFile(this.#path, serializeEntry(stamped), "utf8");
     this.#index(stamped);
+  }
+
+  /**
+   * Returns the effect recorded as requested, snapshotted like every other
+   * read (ADR-0012 §4).
+   */
+  async findRequest(runId: string, effectId: string): Promise<Effect | undefined> {
+    const requested = (this.#runs.get(runId) ?? []).find(
+      (entry) => entry.kind === "effect.requested" && entry.effect.id === effectId,
+    );
+    return requested?.kind === "effect.requested"
+      ? structuredClone(requested.effect)
+      : undefined;
   }
 
   async findResult(runId: string, effectId: string): Promise<EffectResult | undefined> {

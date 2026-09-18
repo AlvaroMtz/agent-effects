@@ -183,6 +183,25 @@ threat model.
 
 *Journal Specification → Requirement: Entries Are Sensitive by Default.*
 
+## What replay is
+
+Replay is **resolution from the journal**. A replay runtime takes a journal and
+nothing else: for each effect it is asked to resolve, it finds the recorded
+request, checks that the effect being replayed is the one that was recorded,
+and returns the recorded result. It never calls an executor, because it has
+nowhere to call one from.
+
+This project says *effect-level deterministic replay*. It does not claim that
+an agent's reasoning replays identically — only that the boundary does.
+
+A replay that cannot answer from the journal fails loudly. An occurrence that
+was never recorded, one that was requested but never resolved, and one whose
+effect differs from what was recorded are all hard failures, never a quietly
+substituted result. Mismatch detection is the feature, not an error path: it is
+how a diverged run announces itself.
+
+*ADR-0004.*
+
 ## What a journal looks like on disk
 
 A JSONL journal is one entry per line, in append order:
