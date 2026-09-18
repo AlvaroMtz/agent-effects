@@ -1,9 +1,13 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { createRuntime, JournalInvariantError } from "./index.js";
 import type {
   Effect,
+  EffectExecutor,
+  EffectJournal,
   EffectKind,
   EffectResult,
   JournalEntry,
+  JournalEntryDraft,
   JournalEntryKind,
   JsonValue,
   Message,
@@ -178,5 +182,245 @@ describe("core type contracts", () => {
     // @ts-expect-error run.failed is not a 0.0.1 journal entry kind
     const failed: JournalEntryKind = "run.failed";
     expect(failed).toBe("run.failed");
+  });
+});
+
+/**
+ * Journal double. Core must not depend on `@agent-effects/journal-memory`
+ * (design §14), so the seam is faked here: it records what was appended,
+ * serves pre-recorded results, and can be told to fail on one entry kind.
+ */
+class FakeJournal implements EffectJournal {
+  readonly appended: JournalEntryDraft[] = [];
+  readonly #recorded = new Map<string, EffectResult>();
+  #failOn?: { kind: JournalEntryKind; error: Error };
+
+  async append(entry: JournalEntryDraft): Promise<void> {
+    if (entry.kind === this.#failOn?.kind) {
+      throw this.#failOn.error;
+    }
+    this.appended.push(entry);
+  }
+
+  async findResult(effectId: string): Promise<EffectResult | undefined> {
+    return this.#recorded.get(effectId);
+  }
+
+  /** Seeds a result as if a previous resolution had recorded it. */
+  record(effectId: string, result: EffectResult): void {
+    this.#recorded.set(effectId, result);
+  }
+
+  /** Makes `append` reject for one entry kind. */
+  failOn(kind: JournalEntryKind, error: Error): void {
+    this.#failOn = { kind, error };
+  }
+}
+
+const weatherEffect: Effect<ToolInvokeInput> = {
+  id: "fx_1",
+  runId: "run_1",
+  type: "tool.invoke",
+  input: { tool: "weather", arguments: { city: "Madrid" } },
+};
+
+function okExecutor(output: unknown = "sunny, 24°C"): EffectExecutor {
+  return {
+    execute: vi.fn(async (effect: Effect) => ({
+      effectId: effect.id,
+      status: "ok" as const,
+      output,
+    })),
+  };
+}
+
+describe("EffectRuntime.resolve", () => {
+  it("resolve weather tool for Madrid returns ok", async () => {
+    const journal = new FakeJournal();
+    const executor = okExecutor();
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    expect(result).toEqual({ effectId: "fx_1", status: "ok", output: "sunny, 24°C" });
+    expect(executor.execute).toHaveBeenCalledWith(weatherEffect);
+    expect(journal.appended).toEqual([
+      { kind: "effect.requested", runId: "run_1", effectId: "fx_1" },
+      {
+        kind: "effect.resolved",
+        runId: "run_1",
+        effectId: "fx_1",
+        result: { effectId: "fx_1", status: "ok", output: "sunny, 24°C" },
+      },
+    ]);
+  });
+
+  it("resolve already-resolved effect without calling executor", async () => {
+    const journal = new FakeJournal();
+    const recorded: EffectResult = { effectId: "fx_1", status: "ok", output: "cloudy, 12°C" };
+    journal.record("fx_1", recorded);
+    const executor = okExecutor();
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    expect(result).toEqual(recorded);
+    expect(executor.execute).not.toHaveBeenCalled();
+    expect(journal.appended).toEqual([]);
+  });
+
+  it("resolve effect without id returns invalid-request", async () => {
+    const journal = new FakeJournal();
+    const executor = okExecutor();
+    const runtime = createRuntime({ executor, journal });
+
+    const withoutId = { runId: "run_1", type: "tool.invoke", input: weatherEffect.input };
+    const result = await runtime.resolve(withoutId as unknown as Effect);
+
+    expect(result).toMatchObject({ status: "error", error: { code: "invalid-request" } });
+    expect(executor.execute).not.toHaveBeenCalled();
+    expect(journal.appended).toEqual([]);
+
+    // Triangulation: an empty id is just as absent as a missing one.
+    const blank = await runtime.resolve({ ...weatherEffect, id: "   " });
+    expect(blank).toMatchObject({ status: "error", error: { code: "invalid-request" } });
+    expect(journal.appended).toEqual([]);
+  });
+
+  it("journal append failure on request returns persistence-failed", async () => {
+    const journal = new FakeJournal();
+    journal.failOn("effect.requested", new Error("journal unavailable"));
+    const executor = okExecutor();
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    expect(result).toMatchObject({
+      effectId: "fx_1",
+      status: "error",
+      error: { code: "persistence-failed" },
+    });
+    expect(executor.execute).not.toHaveBeenCalled();
+  });
+
+  it("journal append failure on result returns unknown", async () => {
+    const journal = new FakeJournal();
+    journal.failOn("effect.resolved", new Error("journal unavailable"));
+    const executor = okExecutor();
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    // The executor already ran, so the outcome is unverifiable -- never a
+    // fabricated ok or error (ADR-0007 §3).
+    expect(result).toEqual({ effectId: "fx_1", status: "unknown" });
+    expect(executor.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplicate id rejected as invalid-request", async () => {
+    const journal = new FakeJournal();
+    journal.failOn(
+      "effect.requested",
+      new JournalInvariantError("duplicate-effect-id", "fx_1 already requested in run_1"),
+    );
+    const executor = okExecutor();
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    expect(result).toMatchObject({
+      effectId: "fx_1",
+      status: "error",
+      error: { code: "invalid-request" },
+    });
+    expect(executor.execute).not.toHaveBeenCalled();
+  });
+
+  it("resolve with adapter metadata preserves metadata", async () => {
+    const journal = new FakeJournal();
+    const executor: EffectExecutor = {
+      execute: vi.fn(async (effect: Effect) => ({
+        effectId: effect.id,
+        status: "ok" as const,
+        output: "sunny, 24°C",
+        metadata: { "adapter.openai.requestId": "req_abc123" },
+      })),
+    };
+    const runtime = createRuntime({ executor, journal });
+    const effect: Effect<ToolInvokeInput> = {
+      ...weatherEffect,
+      metadata: { "adapter.openai.call_id": "call_1", "trace.depth": 2 },
+    };
+
+    const result = await runtime.resolve(effect);
+
+    // The core never reads, rewrites or strips metadata (ADR-0008).
+    expect(executor.execute).toHaveBeenCalledWith(effect);
+    expect(result).toMatchObject({ metadata: { "adapter.openai.requestId": "req_abc123" } });
+  });
+
+  it("maps a thrown executor failure to execution-failed", async () => {
+    const journal = new FakeJournal();
+    const executor: EffectExecutor = {
+      execute: vi.fn(async () => {
+        throw new Error("provider unreachable");
+      }),
+    };
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    // Native exceptions never cross the boundary (ADR-0005).
+    expect(result).toMatchObject({
+      effectId: "fx_1",
+      status: "error",
+      error: { code: "execution-failed", message: "provider unreachable" },
+    });
+    expect(journal.appended.at(-1)).toMatchObject({ kind: "effect.resolved" });
+  });
+
+  it("resolves a model.invoke effect through the same runtime", async () => {
+    const journal = new FakeJournal();
+    const executor = okExecutor("Madrid stays sunny all week.");
+    const runtime = createRuntime({ executor, journal });
+    const effect: Effect<ModelInvokeInput> = {
+      id: "fx_2",
+      runId: "run_1",
+      type: "model.invoke",
+      input: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Summarize the forecast" }],
+      },
+    };
+
+    const result = await runtime.resolve(effect);
+
+    expect(result).toEqual({
+      effectId: "fx_2",
+      status: "ok",
+      output: "Madrid stays sunny all week.",
+    });
+    expect(journal.appended.map((entry) => entry.kind)).toEqual([
+      "effect.requested",
+      "effect.resolved",
+    ]);
+  });
+
+  it("returns a non-terminal executor result without journaling a resolution", async () => {
+    const journal = new FakeJournal();
+    const executor: EffectExecutor = {
+      execute: vi.fn(async (effect: Effect) => ({
+        effectId: effect.id,
+        status: "pending" as const,
+      })),
+    };
+    const runtime = createRuntime({ executor, journal });
+
+    const result = await runtime.resolve(weatherEffect);
+
+    // Nothing terminal happened, and a resolution entry records only
+    // terminal results, so only the request fact is on record.
+    expect(result).toEqual({ effectId: "fx_1", status: "pending" });
+    expect(journal.appended.map((entry) => entry.kind)).toEqual(["effect.requested"]);
   });
 });
