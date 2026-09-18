@@ -1,5 +1,5 @@
 import {
-  JournalInvariantError,
+  assertAppendable,
   type EffectJournal,
   type EffectResult,
   type JournalEntry,
@@ -40,10 +40,18 @@ export class MemoryEffectJournal implements EffectJournal {
   async append(entry: JournalEntryDraft): Promise<void> {
     const entries = this.#runs.get(entry.runId) ?? [];
 
-    rejectRunIdMismatch(entry);
-    rejectDuplicateEffectId(entry, entries);
-    rejectMissingRequest(entry, entries);
-    rejectDuplicateResolution(entry, entries);
+    assertAppendable(entry, {
+      hasRequest: (effectId) =>
+        entries.some(
+          (recorded) =>
+            recorded.kind === "effect.requested" && recorded.effect.id === effectId,
+        ),
+      hasResolution: (effectId) =>
+        entries.some(
+          (recorded) =>
+            recorded.kind === "effect.resolved" && recorded.effectId === effectId,
+        ),
+    });
 
     // Snapshot on write: the caller keeps its object and can go on mutating
     // it; recorded history is a copy nothing outside can reach (ADR-0012 §4).
@@ -82,88 +90,5 @@ export class MemoryEffectJournal implements EffectJournal {
     // Snapshot on read: `readonly` is shallow in TypeScript, so handing back
     // the stored objects would let a reader rewrite the past (ADR-0012 §4).
     return structuredClone(this.#runs.get(runId) ?? []);
-  }
-}
-
-/**
- * Invariant 0: a request entry carries an effect from its own run
- * (ADR-0012 §2).
- */
-function rejectRunIdMismatch(entry: JournalEntryDraft): void {
-  if (entry.kind !== "effect.requested" || entry.effect.runId === entry.runId) {
-    return;
-  }
-  throw new JournalInvariantError(
-    "run-id-mismatch",
-    `effect ${entry.effect.id} belongs to run ${entry.effect.runId}, not ${entry.runId}`,
-  );
-}
-
-/**
- * Invariant 1: an effect id is requested at most once within a run
- * (ADR-0002, ADR-0003 §4).
- */
-function rejectDuplicateEffectId(
-  entry: JournalEntryDraft,
-  entries: readonly JournalEntry[],
-): void {
-  if (entry.kind !== "effect.requested") {
-    return;
-  }
-  const alreadyRequested = entries.some(
-    (recorded) =>
-      recorded.kind === "effect.requested" && recorded.effect.id === entry.effect.id,
-  );
-  if (alreadyRequested) {
-    throw new JournalInvariantError(
-      "duplicate-effect-id",
-      `effect ${entry.effect.id} was already requested in run ${entry.runId}`,
-    );
-  }
-}
-
-/**
- * Invariant 3: an occurrence resolves at most once (ADR-0012 §3). A retry
- * is a new effect with a fresh id (ADR-0005), never a second resolution.
- */
-function rejectDuplicateResolution(
-  entry: JournalEntryDraft,
-  entries: readonly JournalEntry[],
-): void {
-  if (entry.kind !== "effect.resolved") {
-    return;
-  }
-  const alreadyResolved = entries.some(
-    (recorded) =>
-      recorded.kind === "effect.resolved" && recorded.effectId === entry.effectId,
-  );
-  if (alreadyResolved) {
-    throw new JournalInvariantError(
-      "duplicate-resolution",
-      `effect ${entry.effectId} already has a recorded resolution in run ${entry.runId}`,
-    );
-  }
-}
-
-/**
- * Invariant 2: a resolution requires a prior request for the same effect
- * within the run (ADR-0003 §4).
- */
-function rejectMissingRequest(
-  entry: JournalEntryDraft,
-  entries: readonly JournalEntry[],
-): void {
-  if (entry.kind !== "effect.resolved") {
-    return;
-  }
-  const wasRequested = entries.some(
-    (recorded) =>
-      recorded.kind === "effect.requested" && recorded.effect.id === entry.effectId,
-  );
-  if (!wasRequested) {
-    throw new JournalInvariantError(
-      "missing-request",
-      `effect ${entry.effectId} was never requested in run ${entry.runId}`,
-    );
   }
 }
