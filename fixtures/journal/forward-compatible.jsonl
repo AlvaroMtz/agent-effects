@@ -1,0 +1,2 @@
+{"kind":"run.started","runId":"run_3","sequence":1,"schemaVersion":"1.7","timestamp":"2026-01-01T11:00:00.000Z","lane":"experimental"}
+{"kind":"effect.requested","runId":"run_3","sequence":2,"schemaVersion":"1.7","timestamp":"2026-01-01T11:00:00.100Z","effect":{"id":"fx_1","runId":"run_3","type":"tool.invoke","input":{"tool":"weather","arguments":{"city":"Lisbon"}},"budget":{"maxCostUsd":0.01}},"emittedBy":"agent-effects@0.1.7"}

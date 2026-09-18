@@ -31,3 +31,5 @@ export type {
 } from "./types/support.js";
 export { createRuntime } from "./runtime.js";
 export type { EffectRuntime } from "./runtime.js";
+export { assertAppendable } from "./journal-invariants.js";
+export type { RunView } from "./journal-invariants.js";

@@ -1,4 +1,5 @@
 import type { Effect } from "./effect.js";
+import type { SerializableError } from "./support.js";
 import type {
   EffectResult,
   EffectResultError,
@@ -18,14 +19,16 @@ interface JournalEnvelope {
 }
 
 /**
- * The four 0.0.1 entry kinds (proposal Decision 4). New kinds, including
- * `run.failed`, arrive additively in 0.0.2 (ADR-0009 versioning).
+ * The five entry kinds. `run.failed` arrived additively in 0.0.2, which is
+ * a minor bump under ADR-0009 §2: readers of 1.0 keep working and every
+ * previously recorded entry stays valid.
  */
 export type JournalEntryKind =
   | "run.started"
   | "effect.requested"
   | "effect.resolved"
-  | "run.completed";
+  | "run.completed"
+  | "run.failed";
 
 interface RunStartedEntry extends JournalEnvelope {
   kind: "run.started";
@@ -53,11 +56,23 @@ interface RunCompletedEntry extends JournalEnvelope {
   kind: "run.completed";
 }
 
+/**
+ * A run that ended without completing. The error is the portable shape, not
+ * a native exception (ADR-0005). No component writes this entry in 0.0.2:
+ * `createRuntime` is synchronous and never receives a run id, so run
+ * lifecycle stays the caller's to record.
+ */
+interface RunFailedEntry extends JournalEnvelope {
+  kind: "run.failed";
+  error: SerializableError;
+}
+
 export type JournalEntry =
   | RunStartedEntry
   | EffectRequestedEntry
   | EffectResolvedEntry
-  | RunCompletedEntry;
+  | RunCompletedEntry
+  | RunFailedEntry;
 
 /** `Omit` that keeps the discriminated union open instead of collapsing it. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown

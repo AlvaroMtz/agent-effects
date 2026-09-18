@@ -1,0 +1,6 @@
+{"kind":"run.started","runId":"run_1","sequence":1,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:00.000Z"}
+{"kind":"effect.requested","runId":"run_1","sequence":2,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:00.100Z","effect":{"id":"fx_1","runId":"run_1","type":"tool.invoke","input":{"tool":"weather","arguments":{"city":"Madrid"}}}}
+{"kind":"effect.resolved","runId":"run_1","sequence":3,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:00.420Z","effectId":"fx_1","result":{"effectId":"fx_1","status":"ok","output":{"temperature":24,"summary":"sunny"}}}
+{"kind":"effect.requested","runId":"run_1","sequence":4,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:00.500Z","effect":{"id":"fx_2","runId":"run_1","type":"model.invoke","input":{"model":"gpt-4o","messages":[{"role":"user","content":"Summarize the forecast"}]},"metadata":{"adapter.openai.call_id":"call_1"}}}
+{"kind":"effect.resolved","runId":"run_1","sequence":5,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:01.900Z","effectId":"fx_2","result":{"effectId":"fx_2","status":"ok","output":"Madrid stays sunny all week."}}
+{"kind":"run.completed","runId":"run_1","sequence":6,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:02.000Z"}
