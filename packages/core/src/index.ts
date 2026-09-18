@@ -11,10 +11,16 @@ export type {
 } from "./types/effect-result.js";
 export type { EffectExecutor } from "./types/executor.js";
 export type {
+  ExecutionFailure,
+  ExecutionOutcome,
+  ExecutionSuccess,
+} from "./types/execution-outcome.js";
+export type {
   EffectJournal,
   JournalEntry,
   JournalEntryDraft,
   JournalEntryKind,
+  JournalInvariantCode,
 } from "./types/journal.js";
 export { JournalInvariantError } from "./types/journal.js";
 export type {

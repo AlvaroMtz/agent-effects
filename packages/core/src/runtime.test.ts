@@ -3,6 +3,7 @@ import { createRuntime, JournalInvariantError } from "./index.js";
 import type {
   Effect,
   EffectExecutor,
+  ExecutionOutcome,
   EffectJournal,
   EffectKind,
   EffectResult,
@@ -64,7 +65,7 @@ describe("core type contracts", () => {
     const result: EffectResultOk = { effectId: "fx_1", status: "ok", output: "sunny, 24°C" };
     // Membership in the six-state union is asserted at compile time by this assignment.
     const asUnion: EffectResult = result;
-    expectTypeOf(result.output).toEqualTypeOf<unknown>();
+    expectTypeOf(result.output).toEqualTypeOf<JsonValue>();
     expect(asUnion.status).toBe("ok");
     expect(result.output).toBe("sunny, 24°C");
   });
@@ -114,6 +115,20 @@ describe("core type contracts", () => {
     expect(modelRoundTripped.type).toBe("model.invoke");
   });
 
+  it("effect input is constrained to JSON-serializable values", () => {
+    // Functions, sockets and class instances must not be representable in the
+    // portable contract (specs/effect-core -> Effect Is a Serializable Request).
+    // @ts-expect-error a function is not a JsonValue, so it cannot be an effect input
+    type NonSerializable = Effect<{ callback: () => void }>;
+    // Named so the directive above has a use; the type itself is never built.
+    const unreachable: NonSerializable | undefined = undefined;
+    expect(unreachable).toBeUndefined();
+
+    // Both in-scope inputs stay assignable.
+    expectTypeOf<ToolInvokeInput>().toMatchTypeOf<JsonValue>();
+    expectTypeOf<ModelInvokeInput>().toMatchTypeOf<JsonValue>();
+  });
+
   it("EffectKind type allows only tool.invoke and model.invoke", () => {
     const tool: EffectKind = "tool.invoke";
     const model: EffectKind = "model.invoke";
@@ -143,7 +158,12 @@ describe("core type contracts", () => {
         schemaVersion: "1.0",
         timestamp: "2026-01-01T00:00:00.001Z",
         runId: "run_1",
-        effectId: "fx_1",
+        effect: {
+          id: "fx_1",
+          runId: "run_1",
+          type: "tool.invoke",
+          input: { tool: "weather", arguments: { city: "Madrid" } },
+        },
       },
       {
         kind: "effect.resolved",
@@ -202,13 +222,13 @@ class FakeJournal implements EffectJournal {
     this.appended.push(entry);
   }
 
-  async findResult(effectId: string): Promise<EffectResult | undefined> {
-    return this.#recorded.get(effectId);
+  async findResult(runId: string, effectId: string): Promise<EffectResult | undefined> {
+    return this.#recorded.get(`${runId}/${effectId}`);
   }
 
   /** Seeds a result as if a previous resolution had recorded it. */
-  record(effectId: string, result: EffectResult): void {
-    this.#recorded.set(effectId, result);
+  record(runId: string, effectId: string, result: EffectResult): void {
+    this.#recorded.set(`${runId}/${effectId}`, result);
   }
 
   /** Makes `append` reject for one entry kind. */
@@ -224,13 +244,9 @@ const weatherEffect: Effect<ToolInvokeInput> = {
   input: { tool: "weather", arguments: { city: "Madrid" } },
 };
 
-function okExecutor(output: unknown = "sunny, 24°C"): EffectExecutor {
+function okExecutor(output: JsonValue = "sunny, 24°C"): EffectExecutor {
   return {
-    execute: vi.fn(async (effect: Effect) => ({
-      effectId: effect.id,
-      status: "ok" as const,
-      output,
-    })),
+    execute: vi.fn(async () => ({ status: "ok" as const, output })),
   };
 }
 
@@ -245,7 +261,7 @@ describe("EffectRuntime.resolve", () => {
     expect(result).toEqual({ effectId: "fx_1", status: "ok", output: "sunny, 24°C" });
     expect(executor.execute).toHaveBeenCalledWith(weatherEffect);
     expect(journal.appended).toEqual([
-      { kind: "effect.requested", runId: "run_1", effectId: "fx_1" },
+      { kind: "effect.requested", runId: "run_1", effect: weatherEffect },
       {
         kind: "effect.resolved",
         runId: "run_1",
@@ -258,7 +274,7 @@ describe("EffectRuntime.resolve", () => {
   it("resolve already-resolved effect without calling executor", async () => {
     const journal = new FakeJournal();
     const recorded: EffectResult = { effectId: "fx_1", status: "ok", output: "cloudy, 12°C" };
-    journal.record("fx_1", recorded);
+    journal.record("run_1", "fx_1", recorded);
     const executor = okExecutor();
     const runtime = createRuntime({ executor, journal });
 
@@ -339,8 +355,7 @@ describe("EffectRuntime.resolve", () => {
   it("resolve with adapter metadata preserves metadata", async () => {
     const journal = new FakeJournal();
     const executor: EffectExecutor = {
-      execute: vi.fn(async (effect: Effect) => ({
-        effectId: effect.id,
+      execute: vi.fn(async () => ({
         status: "ok" as const,
         output: "sunny, 24°C",
         metadata: { "adapter.openai.requestId": "req_abc123" },
@@ -406,21 +421,27 @@ describe("EffectRuntime.resolve", () => {
     ]);
   });
 
-  it("returns a non-terminal executor result without journaling a resolution", async () => {
+  it("stamps result identity from the dispatched effect", async () => {
     const journal = new FakeJournal();
+    // The outcome names no effect, so an executor cannot claim a different one.
     const executor: EffectExecutor = {
-      execute: vi.fn(async (effect: Effect) => ({
-        effectId: effect.id,
-        status: "pending" as const,
-      })),
+      execute: vi.fn(async () => ({ status: "ok" as const, output: "sunny, 24°C" })),
     };
     const runtime = createRuntime({ executor, journal });
 
     const result = await runtime.resolve(weatherEffect);
 
-    // Nothing terminal happened, and a resolution entry records only
-    // terminal results, so only the request fact is on record.
-    expect(result).toEqual({ effectId: "fx_1", status: "pending" });
-    expect(journal.appended.map((entry) => entry.kind)).toEqual(["effect.requested"]);
+    expect(result).toEqual({ effectId: "fx_1", status: "ok", output: "sunny, 24°C" });
+    expect(journal.appended.at(-1)).toMatchObject({
+      kind: "effect.resolved",
+      effectId: "fx_1",
+      result: { effectId: "fx_1" },
+    });
+  });
+
+  it("an execution outcome cannot name an effect", () => {
+    // @ts-expect-error identity belongs to the runtime, never to the executor
+    const foreign: ExecutionOutcome = { effectId: "fx_999", status: "ok", output: "x" };
+    expect(foreign.status).toBe("ok");
   });
 });

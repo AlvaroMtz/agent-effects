@@ -1,3 +1,4 @@
+import type { Effect } from "./effect.js";
 import type {
   EffectResult,
   EffectResultError,
@@ -32,7 +33,13 @@ interface RunStartedEntry extends JournalEnvelope {
 
 interface EffectRequestedEntry extends JournalEnvelope {
   kind: "effect.requested";
-  effectId: string;
+  /**
+   * The whole effect, not just its id: a journal that records that `fx_1`
+   * happened but not what it attempted cannot serve replay resolution or
+   * mismatch detection (ADR-0012 §2). `effect.runId` must equal the
+   * entry's `runId`.
+   */
+  effect: Effect;
 }
 
 interface EffectResolvedEntry extends JournalEnvelope {
@@ -75,10 +82,16 @@ export type JournalEntryDraft = DistributiveOmit<
  * identically; the runtime maps `duplicate-effect-id` and
  * `missing-request` to `invalid-request` results.
  */
-export class JournalInvariantError extends Error {
-  readonly code: "duplicate-effect-id" | "missing-request";
+export type JournalInvariantCode =
+  | "duplicate-effect-id"
+  | "missing-request"
+  | "duplicate-resolution"
+  | "run-id-mismatch";
 
-  constructor(code: "duplicate-effect-id" | "missing-request", message: string) {
+export class JournalInvariantError extends Error {
+  readonly code: JournalInvariantCode;
+
+  constructor(code: JournalInvariantCode, message: string) {
     super(message);
     this.name = "JournalInvariantError";
     this.code = code;
@@ -91,5 +104,10 @@ export class JournalInvariantError extends Error {
  */
 export interface EffectJournal {
   append(entry: JournalEntryDraft): Promise<void>;
-  findResult(effectId: string): Promise<EffectResult | undefined>;
+  /**
+   * Looks a resolution up by its run-scoped address. Identity is unique
+   * within a run, not globally (ADR-0002), so `run_A/fx_1` and `run_B/fx_1`
+   * are two occurrences and both are addressable (ADR-0012 §1).
+   */
+  findResult(runId: string, effectId: string): Promise<EffectResult | undefined>;
 }

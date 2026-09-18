@@ -17,14 +17,16 @@ const SCHEMA_VERSION = "1.0";
  * (`specs/journal/spec.md` → Requirement: The In-Memory Backend Is
  * Process-Local).
  *
- * Convention: one instance per run (design §14). Entries are keyed by
- * `runId` so a shared instance still keeps per-run sequences separate,
- * but `findResult` takes an effect id alone, so effect ids must be unique
- * across whatever runs a single instance holds.
+ * One instance holds any number of runs: entries are keyed by `runId`,
+ * sequences are per run, and lookups are addressed by `(runId, effectId)`
+ * (ADR-0012 §1). The 0.0.1 "one journal instance per run" convention is
+ * gone; nothing depended on it except the ambiguity it hid.
  *
  * Entries are sensitive by default: nothing here filters, redacts, or
  * rewrites a payload, and no entry is ever mutated or removed once
- * appended (ADR-0003, ADR-0010).
+ * appended (ADR-0003, ADR-0010). Reads and writes are deep copies, so
+ * append-only holds by construction rather than by convention; that is
+ * total only because the portable contract is JSON (ADR-0012 §4).
  */
 export class MemoryEffectJournal implements EffectJournal {
   readonly #runs = new Map<string, JournalEntry[]>();
@@ -38,34 +40,37 @@ export class MemoryEffectJournal implements EffectJournal {
   async append(entry: JournalEntryDraft): Promise<void> {
     const entries = this.#runs.get(entry.runId) ?? [];
 
+    rejectRunIdMismatch(entry);
     rejectDuplicateEffectId(entry, entries);
     rejectMissingRequest(entry, entries);
+    rejectDuplicateResolution(entry, entries);
 
-    entries.push({
-      ...entry,
-      sequence: entries.length + 1,
-      schemaVersion: SCHEMA_VERSION,
-      timestamp: new Date().toISOString(),
-    });
+    // Snapshot on write: the caller keeps its object and can go on mutating
+    // it; recorded history is a copy nothing outside can reach (ADR-0012 §4).
+    entries.push(
+      structuredClone({
+        ...entry,
+        sequence: entries.length + 1,
+        schemaVersion: SCHEMA_VERSION,
+        timestamp: new Date().toISOString(),
+      }),
+    );
     this.#runs.set(entry.runId, entries);
   }
 
   /**
-   * Returns the result recorded for `effectId`, or `undefined` when no
-   * resolution was recorded. Never fabricates a result for an unresolved
+   * Returns the result recorded for `(runId, effectId)`, or `undefined`
+   * when no resolution was recorded in that run. Never fabricates a result for an unresolved
    * effect (`specs/journal/spec.md` → Requirement: Lookup Returns the
    * Recorded Resolution or Its Absence).
    */
-  async findResult(effectId: string): Promise<EffectResult | undefined> {
-    for (const entries of this.#runs.values()) {
-      const resolved = entries.find(
-        (entry) => entry.kind === "effect.resolved" && entry.effectId === effectId,
-      );
-      if (resolved?.kind === "effect.resolved") {
-        return resolved.result;
-      }
-    }
-    return undefined;
+  async findResult(runId: string, effectId: string): Promise<EffectResult | undefined> {
+    const resolved = (this.#runs.get(runId) ?? []).find(
+      (entry) => entry.kind === "effect.resolved" && entry.effectId === effectId,
+    );
+    return resolved?.kind === "effect.resolved"
+      ? structuredClone(resolved.result)
+      : undefined;
   }
 
   /**
@@ -74,8 +79,24 @@ export class MemoryEffectJournal implements EffectJournal {
    * Append-Only Source of Truth).
    */
   entries(runId: string): readonly JournalEntry[] {
-    return this.#runs.get(runId) ?? [];
+    // Snapshot on read: `readonly` is shallow in TypeScript, so handing back
+    // the stored objects would let a reader rewrite the past (ADR-0012 §4).
+    return structuredClone(this.#runs.get(runId) ?? []);
   }
+}
+
+/**
+ * Invariant 0: a request entry carries an effect from its own run
+ * (ADR-0012 §2).
+ */
+function rejectRunIdMismatch(entry: JournalEntryDraft): void {
+  if (entry.kind !== "effect.requested" || entry.effect.runId === entry.runId) {
+    return;
+  }
+  throw new JournalInvariantError(
+    "run-id-mismatch",
+    `effect ${entry.effect.id} belongs to run ${entry.effect.runId}, not ${entry.runId}`,
+  );
 }
 
 /**
@@ -91,12 +112,35 @@ function rejectDuplicateEffectId(
   }
   const alreadyRequested = entries.some(
     (recorded) =>
-      recorded.kind === "effect.requested" && recorded.effectId === entry.effectId,
+      recorded.kind === "effect.requested" && recorded.effect.id === entry.effect.id,
   );
   if (alreadyRequested) {
     throw new JournalInvariantError(
       "duplicate-effect-id",
-      `effect ${entry.effectId} was already requested in run ${entry.runId}`,
+      `effect ${entry.effect.id} was already requested in run ${entry.runId}`,
+    );
+  }
+}
+
+/**
+ * Invariant 3: an occurrence resolves at most once (ADR-0012 §3). A retry
+ * is a new effect with a fresh id (ADR-0005), never a second resolution.
+ */
+function rejectDuplicateResolution(
+  entry: JournalEntryDraft,
+  entries: readonly JournalEntry[],
+): void {
+  if (entry.kind !== "effect.resolved") {
+    return;
+  }
+  const alreadyResolved = entries.some(
+    (recorded) =>
+      recorded.kind === "effect.resolved" && recorded.effectId === entry.effectId,
+  );
+  if (alreadyResolved) {
+    throw new JournalInvariantError(
+      "duplicate-resolution",
+      `effect ${entry.effectId} already has a recorded resolution in run ${entry.runId}`,
     );
   }
 }
@@ -114,7 +158,7 @@ function rejectMissingRequest(
   }
   const wasRequested = entries.some(
     (recorded) =>
-      recorded.kind === "effect.requested" && recorded.effectId === entry.effectId,
+      recorded.kind === "effect.requested" && recorded.effect.id === entry.effectId,
   );
   if (!wasRequested) {
     throw new JournalInvariantError(

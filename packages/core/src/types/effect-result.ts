@@ -25,7 +25,7 @@ export type EffectErrorCode =
 export interface EffectResultOk {
   effectId: string;
   status: "ok";
-  output: unknown;
+  output: JsonValue;
   metadata?: Record<string, JsonValue>;
 }
 

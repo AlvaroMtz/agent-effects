@@ -1,6 +1,6 @@
 # ADR 0003: Append-Only Journal as Source of Truth
 
-- **Status:** Accepted
+- **Status:** Accepted — §4 (invariants) extended by [ADR-0012](0012-run-scoped-journal-entries.md)
 - **Date:** 2026-09-17
 
 ## Context

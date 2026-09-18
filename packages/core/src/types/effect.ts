@@ -8,12 +8,14 @@ import type { JsonValue, Message, ToolDefinition } from "./support.js";
 export type EffectKind = "tool.invoke" | "model.invoke";
 
 /**
- * A serializable request, not an event (ADR-0001). `id` and `runId` are
+ * A serializable request, not an event (ADR-0001). `input` is constrained to
+ * `JsonValue`, so functions, promises, class instances, sockets and
+ * connections are not representable in the portable contract. `id` and `runId` are
  * producer-assigned and required (ADR-0002). `parentEffectId` links a
  * child to the effect that produced it. `metadata` is adapter data in a
  * namespaced field set the core never interprets (ADR-0008).
  */
-export interface Effect<TInput = unknown> {
+export interface Effect<TInput extends JsonValue = JsonValue> {
   id: string;
   runId: string;
   type: EffectKind;
@@ -22,17 +24,22 @@ export interface Effect<TInput = unknown> {
   metadata?: Record<string, JsonValue>;
 }
 
-/** Input payload for `tool.invoke` effects. */
-export interface ToolInvokeInput {
+/**
+ * Input payload for `tool.invoke` effects. Declared as a type alias, not an
+ * interface: only type aliases carry the implicit index signature that makes
+ * them assignable to `JsonValue` (ADR-0012 §4 depends on the contract being
+ * structurally JSON).
+ */
+export type ToolInvokeInput = {
   tool: string;
   arguments: JsonValue;
-}
+};
 
 /**
  * Input payload for `model.invoke` effects: a semantic inference intent
  * (ADR-0008), not a provider HTTP request.
  */
-export interface ModelInvokeInput {
+export type ModelInvokeInput = {
   provider?: string;
   model?: string;
   messages: Message[];
@@ -41,4 +48,4 @@ export interface ModelInvokeInput {
     temperature?: number;
     maxTokens?: number;
   };
-}
+};
