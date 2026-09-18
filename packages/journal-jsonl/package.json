@@ -1,0 +1,41 @@
+{
+  "name": "@agent-effects/journal-jsonl",
+  "version": "0.0.1",
+  "description": "Append-only JSONL EffectJournal backend with a parser, a validator and the normative entry schema.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@agent-effects/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "ajv": "^8.17.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

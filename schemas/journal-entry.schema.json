@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-effects.dev/schemas/journal-entry.schema.json",
+  "title": "Agent Effects journal entry",
+  "description": "Normative shape of a single journal entry, one JSON object per line in a JSONL journal. Schema version 1.0.",
+  "$comment": "additionalProperties is deliberately left open: ADR-0009 requires readers to accept unknown fields within the same major version. A reader rejects an entry only when its schemaVersion major differs from the one it supports.",
+  "type": "object",
+  "required": ["kind", "runId", "sequence", "schemaVersion", "timestamp"],
+  "properties": {
+    "kind": {
+      "enum": [
+        "run.started",
+        "effect.requested",
+        "effect.resolved",
+        "run.completed",
+        "run.failed"
+      ]
+    },
+    "runId": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "effect.requested" } } },
+      "then": {
+        "required": ["effect"],
+        "properties": { "effect": { "$ref": "#/$defs/effect" } }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "effect.resolved" } } },
+      "then": {
+        "required": ["effectId", "result"],
+        "properties": {
+          "effectId": { "type": "string", "minLength": 1 },
+          "result": { "$ref": "#/$defs/terminalResult" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "run.failed" } } },
+      "then": {
+        "required": ["error"],
+        "properties": { "error": { "$ref": "#/$defs/serializableError" } }
+      }
+    }
+  ],
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": ["string", "number", "boolean", "null"] },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/jsonValue" } }
+      ]
+    },
+    "serializableError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "details": { "$ref": "#/$defs/jsonValue" },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": ["id", "runId", "type", "input"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "runId": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["tool.invoke", "model.invoke"] },
+        "input": { "$ref": "#/$defs/jsonValue" },
+        "parentEffectId": { "type": "string", "minLength": 1 },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      }
+    },
+    "terminalResult": {
+      "$comment": "Only ok and error are ever journaled; pending, cancelled, denied and unknown are runtime states, never recorded resolutions.",
+      "type": "object",
+      "required": ["effectId", "status"],
+      "properties": {
+        "effectId": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["ok", "error"] },
+        "output": { "$ref": "#/$defs/jsonValue" },
+        "error": { "$ref": "#/$defs/serializableError" },
+        "retryable": { "type": "boolean" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "ok" } } },
+          "then": { "required": ["output"] }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}
