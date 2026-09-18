@@ -24,7 +24,9 @@ const SCHEMA_VERSION = "1.0";
  *
  * Entries are sensitive by default: nothing here filters, redacts, or
  * rewrites a payload, and no entry is ever mutated or removed once
- * appended (ADR-0003, ADR-0010).
+ * appended (ADR-0003, ADR-0010). Reads and writes are deep copies, so
+ * append-only holds by construction rather than by convention; that is
+ * total only because the portable contract is JSON (ADR-0012 §4).
  */
 export class MemoryEffectJournal implements EffectJournal {
   readonly #runs = new Map<string, JournalEntry[]>();
@@ -41,13 +43,18 @@ export class MemoryEffectJournal implements EffectJournal {
     rejectRunIdMismatch(entry);
     rejectDuplicateEffectId(entry, entries);
     rejectMissingRequest(entry, entries);
+    rejectDuplicateResolution(entry, entries);
 
-    entries.push({
-      ...entry,
-      sequence: entries.length + 1,
-      schemaVersion: SCHEMA_VERSION,
-      timestamp: new Date().toISOString(),
-    });
+    // Snapshot on write: the caller keeps its object and can go on mutating
+    // it; recorded history is a copy nothing outside can reach (ADR-0012 §4).
+    entries.push(
+      structuredClone({
+        ...entry,
+        sequence: entries.length + 1,
+        schemaVersion: SCHEMA_VERSION,
+        timestamp: new Date().toISOString(),
+      }),
+    );
     this.#runs.set(entry.runId, entries);
   }
 
@@ -61,7 +68,9 @@ export class MemoryEffectJournal implements EffectJournal {
     const resolved = (this.#runs.get(runId) ?? []).find(
       (entry) => entry.kind === "effect.resolved" && entry.effectId === effectId,
     );
-    return resolved?.kind === "effect.resolved" ? resolved.result : undefined;
+    return resolved?.kind === "effect.resolved"
+      ? structuredClone(resolved.result)
+      : undefined;
   }
 
   /**
@@ -70,7 +79,9 @@ export class MemoryEffectJournal implements EffectJournal {
    * Append-Only Source of Truth).
    */
   entries(runId: string): readonly JournalEntry[] {
-    return this.#runs.get(runId) ?? [];
+    // Snapshot on read: `readonly` is shallow in TypeScript, so handing back
+    // the stored objects would let a reader rewrite the past (ADR-0012 §4).
+    return structuredClone(this.#runs.get(runId) ?? []);
   }
 }
 
@@ -107,6 +118,29 @@ function rejectDuplicateEffectId(
     throw new JournalInvariantError(
       "duplicate-effect-id",
       `effect ${entry.effect.id} was already requested in run ${entry.runId}`,
+    );
+  }
+}
+
+/**
+ * Invariant 3: an occurrence resolves at most once (ADR-0012 §3). A retry
+ * is a new effect with a fresh id (ADR-0005), never a second resolution.
+ */
+function rejectDuplicateResolution(
+  entry: JournalEntryDraft,
+  entries: readonly JournalEntry[],
+): void {
+  if (entry.kind !== "effect.resolved") {
+    return;
+  }
+  const alreadyResolved = entries.some(
+    (recorded) =>
+      recorded.kind === "effect.resolved" && recorded.effectId === entry.effectId,
+  );
+  if (alreadyResolved) {
+    throw new JournalInvariantError(
+      "duplicate-resolution",
+      `effect ${entry.effectId} already has a recorded resolution in run ${entry.runId}`,
     );
   }
 }

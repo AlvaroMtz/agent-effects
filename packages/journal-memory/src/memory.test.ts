@@ -13,12 +13,16 @@ const weather: Effect<ToolInvokeInput> = {
   metadata: { "adapter.openai.call_id": "call_1" },
 };
 
-/** A request draft for `effectId` inside `runId`, carrying a whole effect. */
+/**
+ * A request draft for `effectId` inside `runId`, carrying a whole effect.
+ * The effect is a deep copy: tests that mutate a draft to prove the journal
+ * snapshotted it must not reach the shared fixture while doing so.
+ */
 function requested(runId: string, effectId: string) {
   return {
     kind: "effect.requested" as const,
     runId,
-    effect: { ...weather, id: effectId, runId },
+    effect: structuredClone({ ...weather, id: effectId, runId }),
   };
 }
 
@@ -194,6 +198,64 @@ describe("MemoryEffectJournal", () => {
       output: "raining in B",
     });
     await expect(journal.findResult("run_C", "fx_1")).resolves.toBeUndefined();
+  });
+
+  it("rejects a second resolution for the same occurrence", async () => {
+    const journal = new MemoryEffectJournal();
+    const result = { effectId: "fx_1", status: "ok", output: "sunny" } as const;
+    await journal.append(requested(RUN, "fx_1"));
+    await journal.append({ kind: "effect.resolved", runId: RUN, effectId: "fx_1", result });
+
+    // Retries are new effects with fresh ids, so a second resolution of the
+    // same occurrence is never legitimate (ADR-0012 §3).
+    await expect(
+      journal.append({ kind: "effect.resolved", runId: RUN, effectId: "fx_1", result }),
+    ).rejects.toMatchObject({ code: "duplicate-resolution" });
+
+    expect(journal.entries(RUN)).toHaveLength(2);
+  });
+
+  it("snapshots on write: mutating the appended effect leaves history intact", async () => {
+    const journal = new MemoryEffectJournal();
+    const draft = requested(RUN, "fx_1");
+    await journal.append(draft);
+
+    draft.effect.input.arguments = { city: "Lisbon" };
+    draft.effect.metadata = { "adapter.openai.call_id": "tampered" };
+
+    expect(journal.entries(RUN)[0]).toMatchObject({
+      effect: {
+        input: { tool: "weather", arguments: { city: "Madrid" } },
+        metadata: { "adapter.openai.call_id": "call_1" },
+      },
+    });
+  });
+
+  it("snapshots on read: mutating a returned entry leaves history intact", async () => {
+    const journal = new MemoryEffectJournal();
+    await journal.append(requested(RUN, "fx_1"));
+    await journal.append({
+      kind: "effect.resolved",
+      runId: RUN,
+      effectId: "fx_1",
+      result: { effectId: "fx_1", status: "ok", output: { temperature: 24 } },
+    });
+
+    const read = journal.entries(RUN)[0];
+    if (read.kind === "effect.requested") {
+      read.effect.input = { tool: "rm", arguments: { path: "/" } };
+    }
+    const resolved = await journal.findResult(RUN, "fx_1");
+    if (resolved?.status === "ok") {
+      resolved.output = { temperature: -273 };
+    }
+
+    expect(journal.entries(RUN)[0]).toMatchObject({
+      effect: { input: { tool: "weather", arguments: { city: "Madrid" } } },
+    });
+    await expect(journal.findResult(RUN, "fx_1")).resolves.toMatchObject({
+      output: { temperature: 24 },
+    });
   });
 
   it("is process-local: a new instance starts empty", async () => {
