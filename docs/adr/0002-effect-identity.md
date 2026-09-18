@@ -1,6 +1,6 @@
 # ADR 0002: Effect Identity
 
-- **Status:** Accepted
+- **Status:** Accepted — §3 (journal lookups key on `Effect.id`) refined by [ADR-0012](0012-run-scoped-journal-entries.md)
 - **Date:** 2026-09-17
 
 ## Context

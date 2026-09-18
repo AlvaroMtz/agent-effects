@@ -1,6 +1,6 @@
 # ADR 0005: Serializable Errors and Retry Semantics
 
-- **Status:** Accepted
+- **Status:** Accepted — the executor seam is narrowed by [ADR-0011](0011-execution-outcome.md); the six-state result model stands
 - **Date:** 2026-09-17
 
 ## Context

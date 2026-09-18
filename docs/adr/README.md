@@ -1,8 +1,9 @@
 # Architecture Decision Records
 
 This directory records the foundational architectural decisions of Agent Effects,
-following the Nygard ADR format. The roadmap (§20) mandates creating these ten
-records from the very beginning, before implementation starts.
+following the Nygard ADR format. The roadmap (§20) mandates creating the first ten
+records from the very beginning, before implementation starts. Later records are
+added as decisions are made; an accepted record is never edited in place.
 
 ## Index
 
@@ -18,6 +19,8 @@ records from the very beginning, before implementation starts.
 | [0008](0008-adapter-metadata.md) | Portable Contract versus Adapter Metadata | Accepted |
 | [0009](0009-schema-versioning.md) | Schema Versioning for Journal Entries | Accepted |
 | [0010](0010-sensitive-data.md) | Journals Are Sensitive by Default; Redaction Is Explicit | Accepted |
+| [0011](0011-execution-outcome.md) | Executors Return an Execution Outcome; the Runtime Owns the Result | Accepted |
+| [0012](0012-run-scoped-journal-entries.md) | Journal Entries Are Run-Scoped, Self-Contained, and Immutable to Callers | Accepted |
 
 ## Process
 
