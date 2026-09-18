@@ -6,6 +6,7 @@ import type {
   EffectResultOk,
 } from "./types/effect-result.js";
 import type { EffectExecutor } from "./types/executor.js";
+import type { ExecutionOutcome } from "./types/execution-outcome.js";
 import type { EffectJournal } from "./types/journal.js";
 import { JournalInvariantError } from "./types/journal.js";
 
@@ -31,7 +32,8 @@ export interface EffectRuntime {
  *    there is one — the executor is never invoked for an occurrence that
  *    already resolved (ADR-0007);
  * 3. record the request fact;
- * 4. make exactly one execution attempt;
+ * 4. make exactly one execution attempt and stamp the effect's identity
+ *    onto what the executor reported;
  * 5. record the resolution fact and return the result.
  */
 export function createRuntime(config: {
@@ -65,12 +67,8 @@ export function createRuntime(config: {
         return mapRequestFailure(effect.id, failure);
       }
 
-      const result = await attemptExecution(executor, effect);
-      if (!isTerminal(result)) {
-        // Nothing terminal happened, so there is no resolution fact to
-        // record; the caller gets the non-terminal state unchanged.
-        return result;
-      }
+      const outcome = await attemptExecution(executor, effect);
+      const result = toResult(effect.id, outcome);
 
       try {
         await journal.append({
@@ -104,12 +102,29 @@ function hasUsableId(effect: Effect): boolean {
 async function attemptExecution(
   executor: EffectExecutor,
   effect: Effect,
-): Promise<EffectResult> {
+): Promise<ExecutionOutcome> {
   try {
     return await executor.execute(effect);
   } catch (failure) {
-    return errorResult(effect.id, "execution-failed", messageOf(failure));
+    return {
+      status: "error",
+      error: { code: "execution-failed", message: messageOf(failure) },
+    };
   }
+}
+
+/**
+ * Attaches the identity the runtime owns to what the executor reported
+ * (ADR-0011). The executor never names the effect, so a recorded
+ * resolution cannot disagree with the entry that holds it.
+ */
+function toResult(
+  effectId: string,
+  outcome: ExecutionOutcome,
+): EffectResultOk | EffectResultError {
+  return outcome.status === "ok"
+    ? { effectId, ...outcome }
+    : { effectId, ...outcome };
 }
 
 /**
@@ -121,11 +136,6 @@ function mapRequestFailure(effectId: string, failure: unknown): EffectResultErro
   return failure instanceof JournalInvariantError
     ? errorResult(effectId, "invalid-request", failure.message)
     : errorResult(effectId, "persistence-failed", messageOf(failure));
-}
-
-/** Only terminal results are recorded as resolutions; pending is never journaled. */
-function isTerminal(result: EffectResult): result is EffectResultOk | EffectResultError {
-  return result.status === "ok" || result.status === "error";
 }
 
 function errorResult(

@@ -3,6 +3,7 @@ import { createRuntime, JournalInvariantError } from "./index.js";
 import type {
   Effect,
   EffectExecutor,
+  ExecutionOutcome,
   EffectJournal,
   EffectKind,
   EffectResult,
@@ -64,7 +65,7 @@ describe("core type contracts", () => {
     const result: EffectResultOk = { effectId: "fx_1", status: "ok", output: "sunny, 24°C" };
     // Membership in the six-state union is asserted at compile time by this assignment.
     const asUnion: EffectResult = result;
-    expectTypeOf(result.output).toEqualTypeOf<unknown>();
+    expectTypeOf(result.output).toEqualTypeOf<JsonValue>();
     expect(asUnion.status).toBe("ok");
     expect(result.output).toBe("sunny, 24°C");
   });
@@ -238,13 +239,9 @@ const weatherEffect: Effect<ToolInvokeInput> = {
   input: { tool: "weather", arguments: { city: "Madrid" } },
 };
 
-function okExecutor(output: unknown = "sunny, 24°C"): EffectExecutor {
+function okExecutor(output: JsonValue = "sunny, 24°C"): EffectExecutor {
   return {
-    execute: vi.fn(async (effect: Effect) => ({
-      effectId: effect.id,
-      status: "ok" as const,
-      output,
-    })),
+    execute: vi.fn(async () => ({ status: "ok" as const, output })),
   };
 }
 
@@ -353,8 +350,7 @@ describe("EffectRuntime.resolve", () => {
   it("resolve with adapter metadata preserves metadata", async () => {
     const journal = new FakeJournal();
     const executor: EffectExecutor = {
-      execute: vi.fn(async (effect: Effect) => ({
-        effectId: effect.id,
+      execute: vi.fn(async () => ({
         status: "ok" as const,
         output: "sunny, 24°C",
         metadata: { "adapter.openai.requestId": "req_abc123" },
@@ -420,21 +416,27 @@ describe("EffectRuntime.resolve", () => {
     ]);
   });
 
-  it("returns a non-terminal executor result without journaling a resolution", async () => {
+  it("stamps result identity from the dispatched effect", async () => {
     const journal = new FakeJournal();
+    // The outcome names no effect, so an executor cannot claim a different one.
     const executor: EffectExecutor = {
-      execute: vi.fn(async (effect: Effect) => ({
-        effectId: effect.id,
-        status: "pending" as const,
-      })),
+      execute: vi.fn(async () => ({ status: "ok" as const, output: "sunny, 24°C" })),
     };
     const runtime = createRuntime({ executor, journal });
 
     const result = await runtime.resolve(weatherEffect);
 
-    // Nothing terminal happened, and a resolution entry records only
-    // terminal results, so only the request fact is on record.
-    expect(result).toEqual({ effectId: "fx_1", status: "pending" });
-    expect(journal.appended.map((entry) => entry.kind)).toEqual(["effect.requested"]);
+    expect(result).toEqual({ effectId: "fx_1", status: "ok", output: "sunny, 24°C" });
+    expect(journal.appended.at(-1)).toMatchObject({
+      kind: "effect.resolved",
+      effectId: "fx_1",
+      result: { effectId: "fx_1" },
+    });
+  });
+
+  it("an execution outcome cannot name an effect", () => {
+    // @ts-expect-error identity belongs to the runtime, never to the executor
+    const foreign: ExecutionOutcome = { effectId: "fx_999", status: "ok", output: "x" };
+    expect(foreign.status).toBe("ok");
   });
 });
