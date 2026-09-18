@@ -52,6 +52,23 @@ export type JournalEntry =
   | EffectResolvedEntry
   | RunCompletedEntry;
 
+/** `Omit` that keeps the discriminated union open instead of collapsing it. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+/**
+ * What a caller hands to `append`: the entry without the envelope fields
+ * the writer stamps itself. `sequence` is assigned at append time and is
+ * strictly monotonic per run (ADR-0003); `schemaVersion` and `timestamp`
+ * are written at creation by the journal (ADR-0009). Callers cannot forge
+ * any of the three.
+ */
+export type JournalEntryDraft = DistributiveOmit<
+  JournalEntry,
+  "sequence" | "schemaVersion" | "timestamp"
+>;
+
 /**
  * Thrown by journal writers when an append would violate a journal
  * invariant (ADR-0003). Core owns the error type so every backend rejects
@@ -73,6 +90,6 @@ export class JournalInvariantError extends Error {
  * (ADR-0007). Corrections happen only by appending, never by mutation.
  */
 export interface EffectJournal {
-  append(entry: JournalEntry): Promise<void>;
+  append(entry: JournalEntryDraft): Promise<void>;
   findResult(effectId: string): Promise<EffectResult | undefined>;
 }

@@ -13,6 +13,7 @@ export type { EffectExecutor } from "./types/executor.js";
 export type {
   EffectJournal,
   JournalEntry,
+  JournalEntryDraft,
   JournalEntryKind,
 } from "./types/journal.js";
 export { JournalInvariantError } from "./types/journal.js";
