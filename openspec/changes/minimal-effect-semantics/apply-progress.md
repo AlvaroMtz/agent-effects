@@ -117,9 +117,44 @@ therefore not met yet and is met by task 5, exactly as the plan sequenced it.
    on stamped envelope fields that `findResult` does not expose. It is additive to
    `EffectJournal`, which journal-memory still implements as declared.
 
+## Slice 1b — Task 5 (`createRuntime` / `resolve`)
+
+| Phase | Command | Result |
+|-------|---------|--------|
+| RED | `pnpm --filter @agent-effects/core test` | exit 1 — 10 failed: `createRuntime is not a function` plus `TypeCheckError: Module "./index.js" has no exported member 'createRuntime'` |
+| GREEN | `pnpm -r test` | exit 0 — core 36 reported (18 distinct tests under the runtime and typecheck suites), journal-memory 7 |
+| GREEN | `pnpm -r typecheck` | exit 0 |
+| GREEN | `pnpm -r build` | exit 0, no test emitted to `dist` |
+
+Matrix rows #1–#6 and #11 land here; TRIANGULATE adds a `model.invoke` effect through
+the same runtime, a thrown executor, and a non-terminal executor result. REFACTOR keeps
+the pipeline flat with named helpers (`hasUsableId`, `attemptExecution`,
+`mapRequestFailure`, `isTerminal`).
+
+**AC15 is met**: 25 distinct tests (18 core + 7 journal-memory) against the 21 the
+milestone requires.
+
+### Deviations (task 5)
+
+12. **A thrown executor maps to `execution-failed`.** Design §7.3 enumerates the failure
+   branches as "complete, no unreachable branches" and lists only the two append
+   failures, but `specs/effect-core/spec.md` → Requirement "Persistence and Execution
+   Failures Have Defined Outcomes" states that an executor which fails maps to the
+   execution-failure code, and Requirement "Effect Results Have Six Resolution States"
+   forbids native exceptions crossing the boundary. The spec wins: `attemptExecution`
+   catches and converts. The design table is incomplete, not contradictory.
+13. **A non-terminal executor result is returned without a resolution entry.**
+   `EffectResolvedEntry.result` admits only `ok` and `error` — pending is never
+   journaled (design §11, and the type shipped in task 3). If an executor returns
+   `pending`, `cancelled`, `denied` or `unknown`, the runtime returns it unchanged and
+   records no resolution fact, because nothing terminal happened. The 0.0.1 runtime
+   itself still produces only `ok`, `error` and `unknown`.
+14. **`findResult` failures are not mapped.** No requirement or design branch assigns an
+   outcome to a journal that throws during lookup, so the runtime does not invent one and
+   the rejection propagates. Worth closing in 0.0.2 alongside the run-lifecycle entries.
+
 ## Remaining tasks (unchecked in tasks.md)
 
-- [ ] 5. Runtime — createRuntime/resolve journal-first pipeline + mandatory example (strict TDD inside this task).
 - [ ] 6. Rewrite docs/concepts/README.md — exit-criteria answers and ADR-locked wording (docs ship inside slice 1b with the behavior; non-code task).
 - [ ] 7. CI workflow + Changesets (sized explicitly here; sits outside slices 1a/1b per the proposal forecast).
 
