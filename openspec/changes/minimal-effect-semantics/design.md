@@ -232,7 +232,7 @@ export type EffectResult = EffectResultOk | EffectResultError
 
 // -- executor.ts --
 export interface EffectExecutor {
-  execute<T = unknown>(effect: Effect): Promise<EffectResult<T>>;
+  execute(effect: Effect): Promise<EffectResult>;
 }
 
 // -- journal.ts --
@@ -262,12 +262,14 @@ export interface EffectJournal {
 
 // -- runtime.ts --
 export interface EffectRuntime {
-  resolve<T = unknown>(effect: Effect): Promise<EffectResult<T>>;
+  resolve(effect: Effect): Promise<EffectResult>;
 }
 export function createRuntime(config: {
   executor: EffectExecutor; journal: EffectJournal;
 }): EffectRuntime;
 // EffectRuntime declares resolve only; no shutdown().
+// `EffectResult` is a non-generic union, so neither `execute` nor `resolve`
+// carries a type parameter (verified against tsc: `EffectResult<T>` is TS2347).
 ```
 
 Key notes: `id` is producer-assigned and required (ADR-0002);
