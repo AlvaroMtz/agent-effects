@@ -32,40 +32,70 @@ RED → GREEN → TRIANGULATE → REFACTOR, binding command `pnpm -r test`.
 
 ## Work units
 
-- [ ] 1. ADR-0011 and ADR-0012 (docs only; no code).
+- [x] 1. ADR-0011 and ADR-0012 (docs only; no code).
   - ADR-0011 — executors return an execution outcome, the runtime owns the result.
   - ADR-0012 — journal entries are run-scoped, self-contained and immutable to callers (covers changes 1, 2, 5 and invariant I4).
   - Update `docs/adr/README.md` index, and the Status lines of ADR-0002 and ADR-0003 to point at their successors. The ADR process forbids editing an accepted decision in place.
   - Check: both files follow the Nygard sections used by 0001–0010; the index lists twelve rows.
 
-- [ ] 2. `JsonValue` on the portable contract (change 4a).
+- [x] 2. `JsonValue` on the portable contract (change 4a).
   - `Effect<TInput extends JsonValue = JsonValue>`; `metadata` unchanged.
   - RED: an effect whose input holds a function stops typechecking.
   - Check: `pnpm -r typecheck` green; the two in-scope kinds still typecheck.
 
-- [ ] 3. `ExecutionOutcome` and runtime-owned results (change 3).
+- [x] 3. `ExecutionOutcome` and runtime-owned results (change 3).
   - New `execution-outcome.ts`: `ExecutionOutcome = ExecutionSuccess | ExecutionFailure`, no `effectId`.
   - `EffectExecutor.execute` returns `Promise<ExecutionOutcome>`; the runtime stamps `effectId` from `effect.id`.
   - RED: an executor reporting a foreign id cannot reach the recorded result.
   - Check: deviation 13 of 0.0.1 disappears — a non-terminal executor result is now unrepresentable.
 
-- [ ] 4. Run-scoped lookup (change 2).
+- [x] 4. Run-scoped lookup (change 2).
   - `EffectJournal.findResult(runId, effectId)`; `MemoryEffectJournal` keys per run.
   - RED: `run_A/fx_1` and `run_B/fx_1` coexist and resolve independently.
   - Check: the "one journal instance per run" convention is deleted from code and docs.
 
-- [ ] 5. Self-contained request entries (change 1).
+- [x] 5. Self-contained request entries (change 1).
   - `EffectRequestedEntry` carries `effect: Effect` instead of `effectId`; invariant `entry.runId === entry.effect.runId`.
   - RED: the recorded request reconstructs type, input and metadata.
 
-- [ ] 6. Snapshot on write and read, plus invariant I4 (change 5).
+- [x] 6. Snapshot on write and read, plus invariant I4 (change 5).
   - `structuredClone` on append and on read; duplicate `effect.resolved` rejected.
   - RED: mutating the caller's effect after append, and mutating a read entry, both leave history intact.
 
-- [ ] 7. Documentation.
+- [x] 7. Documentation.
   - `docs/concepts/README.md`: the new executor and journal contract.
   - `docs/migration/0.0.1-to-0.0.2.md`: the four breaking changes with before/after.
   - Check: no stale `findResult(effectId)` or executor-returns-`EffectResult` wording remains.
 
 Deferred, explicitly not tasks here: replay runtime (0.0.3), JSONL backend,
 JSON Schema publication, `run.failed` entries, policy, adapters.
+
+## Outcome
+
+All seven work units complete on `feat/portable-journal-semantics`.
+
+| Check | Result |
+|-------|--------|
+| `pnpm -r test` | exit 0 — core 40 reported (20 distinct across the runtime and typecheck suites), journal-memory 13 |
+| `pnpm -r typecheck` | exit 0 |
+| `pnpm -r build` | exit 0 |
+
+Distinct tests: 33, up from 25 in 0.0.1.
+
+### Deviations from the review document
+
+1. **`ExecutionSuccess` and `ExecutionFailure` keep `metadata`.** The document's
+   sketch drops it, which would silently remove the adapter-metadata channel on
+   the result side that ADR-0008 defines and that a 0.0.1 test asserts.
+2. **`ToolInvokeInput`, `ModelInvokeInput`, `Message` and `ToolDefinition`
+   became type aliases.** Not mentioned in the document, but required: a
+   TypeScript `interface` is not assignable to `JsonValue` because it carries no
+   implicit index signature, so the JSON-first constraint cannot be satisfied
+   while they stay interfaces. Verified before implementing.
+3. **The request-append failure mapping is unchanged.** The document's §12
+   pseudo-runtime maps every request-append failure to a generic `error`, losing
+   the `invalid-request` vs `persistence-failed` distinction that the 0.0.1
+   specification requires. Kept as shipped.
+4. **`run-id-mismatch` and `duplicate-resolution` invariant codes** were added to
+   `JournalInvariantError`; the document names the invariants (I4, I5) but not
+   how a writer signals them.

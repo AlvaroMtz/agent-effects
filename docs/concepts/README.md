@@ -53,12 +53,13 @@ occurrence is never executed a second time:
 
 ```
 resolve(effect)
-  ├─ 1. validate the producer-assigned id      → invalid-request, nothing written
-  ├─ 2. journal.findResult(effect.id)          → recorded result returned unchanged
-  ├─ 3. journal.append(effect.requested)       → the request fact, before dispatch
-  ├─ 4. executor.execute(effect)               → exactly one attempt
-  ├─ 5. journal.append(effect.resolved)        → the resolution fact
-  └─ 6. return the result
+  ├─ 1. validate the producer-assigned id       → invalid-request, nothing written
+  ├─ 2. journal.findResult(runId, effectId)     → recorded result returned unchanged
+  ├─ 3. journal.append(effect.requested)        → the whole effect, before dispatch
+  ├─ 4. executor.execute(effect)                → exactly one attempt, returns an outcome
+  ├─ 5. stamp effectId onto the outcome         → the runtime owns identity
+  ├─ 6. journal.append(effect.resolved)         → the resolution fact
+  └─ 7. return the result
 ```
 
 Step 2 is what makes replay possible at all: replay is **resolution from the
@@ -68,14 +69,32 @@ replay* and never claims perfect deterministic agent replay.
 *Effect Core Specification → Requirement: Resolution Consults the Journal First;
 Requirement: At Most One Execution Attempt per Recorded Occurrence.*
 
+## Who reports what
+
+The executor reports an **`ExecutionOutcome`** — `ok` with an output, or `error`
+with a serializable error — and nothing else. It does not name the effect: the
+runtime stamps `effectId` from the effect it dispatched, so an executor cannot
+claim a result belongs to a different effect than the one it was handed. It also
+cannot report `pending`, `cancelled` or `denied`, which describe lifecycle,
+cancellation and policy: machinery an executor has no way to observe.
+
+The runtime turns that outcome into the `EffectResult` the caller sees, and it
+is the only component that can produce `unknown`.
+
+*Effect Core Specification → Requirement: Identity Is Validated at the Boundary.*
+
 ## When the journal is written
 
 Twice per resolved occurrence, both times by the runtime: the request fact
-before dispatch, and the resolution fact once execution completes. The journal
-writer — not the caller — stamps each entry with a strictly monotonic per-run
-`sequence`, a `schemaVersion` written at creation, and a timestamp. The sequence
-records append order only; causality is expressed exclusively through explicit
-links such as `parentEffectId`.
+before dispatch, and the resolution fact once execution completes. A request
+entry carries the **whole effect**, not just its id — a journal that records
+that `fx_1` happened but not what it attempted cannot support replay,
+mismatch detection, audit or diff.
+
+The journal writer — not the caller — stamps each entry with a strictly
+monotonic per-run `sequence`, a `schemaVersion` written at creation, and a
+timestamp. The sequence records append order only; causality is expressed
+exclusively through explicit links such as `parentEffectId`.
 
 Milestone 0.0.1 defines four entry kinds — `run.started`, `effect.requested`,
 `effect.resolved`, `run.completed` — and the runtime writes exactly two of them.
@@ -104,6 +123,11 @@ being produced:
 | `pending` | no | deferred to human-in-the-loop effects |
 | `cancelled` | no | deferred to cancellation support |
 | `denied` | no | deferred to the policy engine |
+
+The three unproduced states stay in the union on purpose, so consumers never
+face a breaking change when the machinery that produces them arrives. What
+`0.0.2` removed is not the states but the ability of an *executor* to report
+them.
 
 A retry is a **new effect with a fresh id**, linked to its predecessor through
 metadata. There is no attempt counter on the model.
@@ -161,10 +185,17 @@ threat model.
 
 ## Conventions
 
-- **One journal instance per run.** Entries are keyed by run id, so a shared
-  instance keeps per-run sequences separate, but `findResult` takes an effect id
-  alone. Keeping one journal per run removes the ambiguity at the source.
+- **A journal is addressed by `(runId, effectId)`.** Identity is unique within a
+  run, never globally, so `run_A/fx_1` and `run_B/fx_1` are two occurrences and
+  one journal can hold both. This is what a JSONL file will be.
+- **Recorded history cannot be reached from outside.** The backend stores a deep
+  copy of what it is given and returns deep copies to readers, so neither the
+  producer nor a reader can rewrite the past. Append-only is a property of the
+  implementation, not an expectation of its callers.
+- **An occurrence resolves at most once.** A retry is a new effect with a fresh
+  id, never a second resolution of the same one.
 - **The in-memory backend is process-local.** It makes no durability claim
   beyond the life of the process and consults no external storage.
 
-*Journal Specification → Requirement: The In-Memory Backend Is Process-Local.*
+*Journal Specification → Requirement: The In-Memory Backend Is Process-Local;
+ADR-0012.*
