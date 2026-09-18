@@ -143,7 +143,7 @@ describe("core type contracts", () => {
     expect(exhaustive["model.invoke"]).toBe(true);
   });
 
-  it("JournalEntry union covers all four kinds", () => {
+  it("JournalEntry union covers all five kinds", () => {
     const entries: JournalEntry[] = [
       {
         kind: "run.started",
@@ -181,27 +181,31 @@ describe("core type contracts", () => {
         timestamp: "2026-01-01T00:00:00.003Z",
         runId: "run_1",
       },
+      {
+        kind: "run.failed",
+        sequence: 5,
+        schemaVersion: "1.0",
+        timestamp: "2026-01-01T00:00:00.004Z",
+        runId: "run_2",
+        error: { code: "run-failed", message: "the run aborted" },
+      },
     ];
     expect(entries.map((entry) => entry.kind)).toEqual([
       "run.started",
       "effect.requested",
       "effect.resolved",
       "run.completed",
+      "run.failed",
     ]);
-    // Compile-time exhaustiveness: a fifth 0.0.1 kind would break this Record.
+    // Compile-time exhaustiveness: a sixth kind would break this Record.
     const exhaustive: Record<JournalEntryKind, true> = {
       "run.started": true,
       "effect.requested": true,
       "effect.resolved": true,
       "run.completed": true,
+      "run.failed": true,
     };
-    expect(Object.keys(exhaustive)).toHaveLength(4);
-    // run.failed is absent from the 0.0.1 union; it arrives in 0.0.2
-    // (proposal Conflicts #3). If it is ever added, this directive fails
-    // the build as "unused" and forces a conscious union update.
-    // @ts-expect-error run.failed is not a 0.0.1 journal entry kind
-    const failed: JournalEntryKind = "run.failed";
-    expect(failed).toBe("run.failed");
+    expect(Object.keys(exhaustive)).toHaveLength(5);
   });
 });
 
