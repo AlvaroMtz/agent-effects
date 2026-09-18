@@ -1,0 +1,89 @@
+# openspec/config.yaml — canonical schema (written by /gentle-sdd-init, then
+# extended with the project values declared by docs/ROADMAP.md and docs/adr/).
+schema: spec-driven
+strict_tdd: true
+context: |
+  agent-effects is a TypeScript (strict, ESM, Node LTS) monorepo project.
+  Thesis: a portable representation of the external effects produced during agent
+  execution, with journaling, deterministic replay, testing and policy enforcement
+  as derived capabilities. Source of truth: docs/ROADMAP.md (written in Spanish);
+  all technical artifacts (code, configs, comments, SDD artifacts) are in English.
+  Stage: pre-0.0.1. Positioning: it sits below agent frameworks instead of
+  replacing them; it defines the boundary between agentic computation and external
+  side effects. It is not an agent framework (roadmap §3 non-goals).
+  Layout: roadmap §25. Stubs only today - packages/, spec/, schemas/, fixtures/,
+  examples/ and conformance/ hold placeholder READMEs; there is no package.json,
+  no TypeScript code and no CI.
+  Initial packages: @agent-effects/core, @agent-effects/journal-memory.
+  Initial effects: tool.invoke, model.invoke.
+  Testing: strict TDD with Vitest at the workspace root. The command becomes
+  binding when the 0.0.1 monorepo scaffolding lands; roadmap 0.0.1 requires 20+
+  unit tests before 0.0.2. Cycle: RED, GREEN, TRIANGULATE, REFACTOR; record
+  RED/GREEN evidence per task in apply notes and summarize it in the verify report.
+  Binding constraints (accepted ADRs, docs/adr/0001-0010):
+  - ADR 0001: effects represent requested operations, not events that already happened.
+  - ADR 0002: effect identity is a producer-assigned required ID.
+  - ADR 0003: the journal is append-only and the source of truth.
+  - ADR 0004: replay resolves from the journal and never re-executes effects.
+  - ADR 0005: errors are serializable; retries are new effects linked with retryOf.
+  - ADR 0006: ordering distinguishes sequence from causality.
+  - ADR 0007: no exactly-once guarantee for external side effects.
+  - ADR 0008: adapters keep framework specifics in namespaced metadata.
+  - ADR 0009: journal entry schemas are versioned.
+  - ADR 0010: journals are sensitive by default; redaction is explicit.
+rules:
+  proposal:
+    require_problem_statement: true
+  spec:
+    require_acceptance_criteria: true
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    require_tradeoffs: true
+  tasks:
+    protect_review_workload: true
+  apply:
+    guidelines:
+      - Follow existing code patterns
+    tdd: true
+    test_command: "pnpm -r test"
+  verify:
+    test_command: "pnpm -r test"
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+    - Archived changes are an audit trail; never delete or modify them
+testing:
+  detected: "2026-09-18"
+  runner:
+    command: "pnpm -r test"
+    framework: "Vitest"
+  layers:
+    unit: "Vitest"
+    integration: ""
+    e2e: ""
+  commands:
+    unit:
+      - scope: "workspace root"
+        command: "pnpm -r test"
+        framework: "Vitest"
+    integration:
+      []
+    e2e:
+      []
+  coverage:
+    command: ""
+    commands:
+      []
+quality:
+  lint: ""
+  lint_commands:
+    []
+  typecheck: ""
+  typecheck_commands:
+    []
+  format: ""
+  format_commands:
+    []
