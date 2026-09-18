@@ -38,6 +38,7 @@ export class MemoryEffectJournal implements EffectJournal {
   async append(entry: JournalEntryDraft): Promise<void> {
     const entries = this.#runs.get(entry.runId) ?? [];
 
+    rejectRunIdMismatch(entry);
     rejectDuplicateEffectId(entry, entries);
     rejectMissingRequest(entry, entries);
 
@@ -74,6 +75,20 @@ export class MemoryEffectJournal implements EffectJournal {
 }
 
 /**
+ * Invariant 0: a request entry carries an effect from its own run
+ * (ADR-0012 §2).
+ */
+function rejectRunIdMismatch(entry: JournalEntryDraft): void {
+  if (entry.kind !== "effect.requested" || entry.effect.runId === entry.runId) {
+    return;
+  }
+  throw new JournalInvariantError(
+    "run-id-mismatch",
+    `effect ${entry.effect.id} belongs to run ${entry.effect.runId}, not ${entry.runId}`,
+  );
+}
+
+/**
  * Invariant 1: an effect id is requested at most once within a run
  * (ADR-0002, ADR-0003 §4).
  */
@@ -86,12 +101,12 @@ function rejectDuplicateEffectId(
   }
   const alreadyRequested = entries.some(
     (recorded) =>
-      recorded.kind === "effect.requested" && recorded.effectId === entry.effectId,
+      recorded.kind === "effect.requested" && recorded.effect.id === entry.effect.id,
   );
   if (alreadyRequested) {
     throw new JournalInvariantError(
       "duplicate-effect-id",
-      `effect ${entry.effectId} was already requested in run ${entry.runId}`,
+      `effect ${entry.effect.id} was already requested in run ${entry.runId}`,
     );
   }
 }
@@ -109,7 +124,7 @@ function rejectMissingRequest(
   }
   const wasRequested = entries.some(
     (recorded) =>
-      recorded.kind === "effect.requested" && recorded.effectId === entry.effectId,
+      recorded.kind === "effect.requested" && recorded.effect.id === entry.effectId,
   );
   if (!wasRequested) {
     throw new JournalInvariantError(

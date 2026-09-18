@@ -61,7 +61,7 @@ export function createRuntime(config: {
         await journal.append({
           kind: "effect.requested",
           runId: effect.runId,
-          effectId: effect.id,
+          effect,
         });
       } catch (failure) {
         return mapRequestFailure(effect.id, failure);

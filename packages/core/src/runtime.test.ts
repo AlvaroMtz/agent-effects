@@ -158,7 +158,12 @@ describe("core type contracts", () => {
         schemaVersion: "1.0",
         timestamp: "2026-01-01T00:00:00.001Z",
         runId: "run_1",
-        effectId: "fx_1",
+        effect: {
+          id: "fx_1",
+          runId: "run_1",
+          type: "tool.invoke",
+          input: { tool: "weather", arguments: { city: "Madrid" } },
+        },
       },
       {
         kind: "effect.resolved",
@@ -256,7 +261,7 @@ describe("EffectRuntime.resolve", () => {
     expect(result).toEqual({ effectId: "fx_1", status: "ok", output: "sunny, 24°C" });
     expect(executor.execute).toHaveBeenCalledWith(weatherEffect);
     expect(journal.appended).toEqual([
-      { kind: "effect.requested", runId: "run_1", effectId: "fx_1" },
+      { kind: "effect.requested", runId: "run_1", effect: weatherEffect },
       {
         kind: "effect.resolved",
         runId: "run_1",

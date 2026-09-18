@@ -20,6 +20,7 @@ export type {
   JournalEntry,
   JournalEntryDraft,
   JournalEntryKind,
+  JournalInvariantCode,
 } from "./types/journal.js";
 export { JournalInvariantError } from "./types/journal.js";
 export type {
