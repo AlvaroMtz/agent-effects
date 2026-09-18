@@ -1,5 +1,6 @@
 import {
   assertAppendable,
+  type Effect,
   type EffectJournal,
   type EffectResult,
   type JournalEntry,
@@ -72,6 +73,19 @@ export class MemoryEffectJournal implements EffectJournal {
    * effect (`specs/journal/spec.md` → Requirement: Lookup Returns the
    * Recorded Resolution or Its Absence).
    */
+  /**
+   * Returns the effect recorded as requested, snapshotted like every other
+   * read (ADR-0012 §4).
+   */
+  async findRequest(runId: string, effectId: string): Promise<Effect | undefined> {
+    const requested = (this.#runs.get(runId) ?? []).find(
+      (entry) => entry.kind === "effect.requested" && entry.effect.id === effectId,
+    );
+    return requested?.kind === "effect.requested"
+      ? structuredClone(requested.effect)
+      : undefined;
+  }
+
   async findResult(runId: string, effectId: string): Promise<EffectResult | undefined> {
     const resolved = (this.#runs.get(runId) ?? []).find(
       (entry) => entry.kind === "effect.resolved" && entry.effectId === effectId,

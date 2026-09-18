@@ -125,4 +125,12 @@ export interface EffectJournal {
    * are two occurrences and both are addressable (ADR-0012 §1).
    */
   findResult(runId: string, effectId: string): Promise<EffectResult | undefined>;
+  /**
+   * Returns the effect recorded as requested at that address, or
+   * `undefined` when the occurrence was never requested. Replay resolves
+   * from the recorded request/resolution pair (ADR-0004 §1), and the
+   * request entry carries the whole effect so it can be verified
+   * (ADR-0012 §2).
+   */
+  findRequest(runId: string, effectId: string): Promise<Effect | undefined>;
 }

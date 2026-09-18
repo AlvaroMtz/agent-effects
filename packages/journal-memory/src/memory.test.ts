@@ -267,3 +267,31 @@ describe("MemoryEffectJournal", () => {
     await expect(second.findResult(RUN, "fx_1")).resolves.toBeUndefined();
   });
 });
+
+describe("MemoryEffectJournal.findRequest", () => {
+  it("returns the recorded effect, snapshotted", async () => {
+    const journal = new MemoryEffectJournal();
+    await journal.append(requested(RUN, "fx_1"));
+
+    const found = await journal.findRequest(RUN, "fx_1");
+    expect(found).toMatchObject({
+      id: "fx_1",
+      type: "tool.invoke",
+      input: { tool: "weather", arguments: { city: "Madrid" } },
+    });
+
+    // Mutating what a lookup returned must not reach recorded history.
+    found!.input = { tool: "rm", arguments: { path: "/" } };
+    await expect(journal.findRequest(RUN, "fx_1")).resolves.toMatchObject({
+      input: { tool: "weather", arguments: { city: "Madrid" } },
+    });
+  });
+
+  it("reports absence for an occurrence that was never requested", async () => {
+    const journal = new MemoryEffectJournal();
+    await expect(journal.findRequest(RUN, "fx_404")).resolves.toBeUndefined();
+    await journal.append(requested("run_other", "fx_1"));
+    // Addressing is per run, so another run's request is not visible here.
+    await expect(journal.findRequest(RUN, "fx_1")).resolves.toBeUndefined();
+  });
+});

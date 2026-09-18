@@ -230,6 +230,16 @@ class FakeJournal implements EffectJournal {
     return this.#recorded.get(`${runId}/${effectId}`);
   }
 
+  async findRequest(runId: string, effectId: string): Promise<Effect | undefined> {
+    const entry = this.appended.find(
+      (appended) =>
+        appended.kind === "effect.requested" &&
+        appended.runId === runId &&
+        appended.effect.id === effectId,
+    );
+    return entry?.kind === "effect.requested" ? entry.effect : undefined;
+  }
+
   /** Seeds a result as if a previous resolution had recorded it. */
   record(runId: string, effectId: string, result: EffectResult): void {
     this.#recorded.set(`${runId}/${effectId}`, result);
