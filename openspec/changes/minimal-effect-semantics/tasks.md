@@ -17,12 +17,12 @@ in the apply notes.
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
 | Suggested split | Slice 1a: scaffolding + core types + contracts (~315) → Slice 1b: journal-memory + runtime + concepts docs (~350) → Slice 1c: CI + Changesets (~35) |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Delivery strategy | exception-ok — maintainer accepted `size:exception` for slice 1b on 2026-09-18 |
+| Chain strategy | n/a for slice 1b — it ships as one PR under `size:exception` |
 
 Decision needed before apply: Yes
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: n/a for slice 1b (single PR under `size:exception`)
 400-line budget risk: High
 
 ## Slices
@@ -99,7 +99,7 @@ depend on 3; tasks 6 and 7 settle after 5).
   - Check: `pnpm -r test` green with all 21 matrix tests present (AC15); executor invoked at most once per recorded occurrence (AC6).
   - Est. lines: ~125.
 
-- [ ] 6. Rewrite docs/concepts/README.md — exit-criteria answers and ADR-locked wording (docs ship inside slice 1b with the behavior; non-code task).
+- [x] 6. Rewrite docs/concepts/README.md — exit-criteria answers and ADR-locked wording (docs ship inside slice 1b with the behavior; non-code task).
   - Files: `docs/concepts/README.md` (rewrite the stub).
   - Work: replace the stub's pre-ADR `append → execute → append` sketch with the journal-first pipeline (proposal Conflicts #1); answer the seven roadmap 0.0.1 exit-criteria questions, each traceable to a named spec requirement (AC17–AC21; `specs/effect-core/spec.md` → Requirement "Exit-Criteria Answers Are Traceable to This Specification"); carry the ADR-0004 locked wording, the ADR-0007 no-exactly-once disclosure sentence, and the ADR-0010 sensitive-by-default posture with the deferred-redaction disclosure (AC14; design §10.2 — the hook seam is documented, not implemented); document the six resolution states including the three 0.0.1 never produces (design §11) and the one-journal-instance-per-run convention (design §14).
   - Refs: design §10, §11, §14, §16 (risk row "Documentation deliverable is load-bearing"); `docs/ROADMAP.md` 0.0.1 exit criteria; `docs/concepts/README.md` stub.

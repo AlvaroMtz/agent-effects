@@ -153,9 +153,34 @@ milestone requires.
    outcome to a journal that throws during lookup, so the runtime does not invent one and
    the rejection propagates. Worth closing in 0.0.2 alongside the run-lifecycle entries.
 
+## Slice 1b — Task 6 (`docs/concepts/README.md`) and the delivery decision
+
+Task 6 replaces the stub. The superseded `validate -> policy -> execute -> journal ->
+result` sketch is not merely deleted: it is named and marked superseded, because proposal
+Conflicts #1 is about implementers following the old ordering, and a reader who remembers
+the old sketch needs to be told it is wrong. All seven roadmap exit-criteria questions are
+answered with their own section, each closing with the named spec requirement that states
+the answer normatively. The ADR-0007 disclosure sentence appears verbatim, ADR-0004's
+locked "effect-level deterministic replay" wording is used and the forbidden phrasing is
+explicitly disclaimed, and ADR-0010's sensitive-by-default posture ships with the
+deferred-hook disclosure. English only.
+
+### Delivery decision — `size:exception` accepted
+
+| Field | Value |
+|-------|-------|
+| Slice | 1b (tasks 4–6) |
+| Authored lines | 748 source and config, 841 including these artifacts (`pnpm-lock.yaml` excluded as generated) |
+| Review budget | 400 |
+| Decision | maintainer accepted `size:exception` on 2026-09-18; no chain strategy is needed for this slice |
+
+The slice is not shrinkable without dishonesty: roughly 375 lines are the strict-TDD test
+suites themselves, the runtime and journal are the deliverable, and the concepts document
+is a named acceptance criterion (AC14, AC17–AC21). `delivery_strategy` is recorded as
+`exception-ok` in `tasks.md`.
+
 ## Remaining tasks (unchecked in tasks.md)
 
-- [ ] 6. Rewrite docs/concepts/README.md — exit-criteria answers and ADR-locked wording (docs ship inside slice 1b with the behavior; non-code task).
 - [ ] 7. CI workflow + Changesets (sized explicitly here; sits outside slices 1a/1b per the proposal forecast).
 
 ## Workload / PR boundary
