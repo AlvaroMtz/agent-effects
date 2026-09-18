@@ -114,6 +114,20 @@ describe("core type contracts", () => {
     expect(modelRoundTripped.type).toBe("model.invoke");
   });
 
+  it("effect input is constrained to JSON-serializable values", () => {
+    // Functions, sockets and class instances must not be representable in the
+    // portable contract (specs/effect-core -> Effect Is a Serializable Request).
+    // @ts-expect-error a function is not a JsonValue, so it cannot be an effect input
+    type NonSerializable = Effect<{ callback: () => void }>;
+    // Named so the directive above has a use; the type itself is never built.
+    const unreachable: NonSerializable | undefined = undefined;
+    expect(unreachable).toBeUndefined();
+
+    // Both in-scope inputs stay assignable.
+    expectTypeOf<ToolInvokeInput>().toMatchTypeOf<JsonValue>();
+    expectTypeOf<ModelInvokeInput>().toMatchTypeOf<JsonValue>();
+  });
+
   it("EffectKind type allows only tool.invoke and model.invoke", () => {
     const tool: EffectKind = "tool.invoke";
     const model: EffectKind = "model.invoke";
