@@ -73,7 +73,7 @@ Branch: `feat/minimal-effect-semantics-1b`. Implemented directly (no SDD phase a
 | Phase | Command | Result |
 |-------|---------|--------|
 | RED | `pnpm -r test` | exit 1 — `Cannot find module './memory.js'`; the 7 journal tests cannot run |
-| GREEN | `pnpm -r test` | exit 0 — 31 passed (24 core incl. typecheck suites + 7 journal-memory) |
+| GREEN | `pnpm -r test` | exit 0 — 23 passed (16 core = 8 tests under the runtime and typecheck suites + 7 journal-memory), after the dist-collection fix below |
 | GREEN | `pnpm -r typecheck` | exit 0 |
 | GREEN | `pnpm -r build` | exit 0 |
 
@@ -82,6 +82,19 @@ lifecycle order, a second run asserting the per-run counter scope, a writer that
 usable after a rejected duplicate, and a secret-like payload round-tripped through both
 `entries()` and `findResult`; the two invariants live in named guards
 (`rejectDuplicateEffectId`, `rejectMissingRequest`).
+
+### Correction — inflated test counts (task 4)
+
+Vitest was collecting `dist/**/*.test.js`, the compiled copy of each suite, so every
+test ran twice and the reported totals were wrong: the slice-1a "24 passed" recorded in
+`## Parent reconciliation` was 8 distinct core tests counted three times (runtime suite,
+typecheck suite, compiled copy), not type-level surplus coverage. Fixed by excluding
+`**/dist/**` from `test.exclude` in both Vitest configs and by building through a
+`tsconfig.build.json` that excludes `src/**/*.test.ts`, so no test is emitted to `dist`
+at all. Real counts today: **8 distinct core tests** (16 reported, runtime plus
+typecheck) and **7 journal-memory tests** — 15 distinct, matching design §13.2's plan of
+15 core plus 6 journal once task 5 adds the remaining 7 core tests. AC15 (≥21) is
+therefore not met yet and is met by task 5, exactly as the plan sequenced it.
 
 ### Deviations (task 4)
 
