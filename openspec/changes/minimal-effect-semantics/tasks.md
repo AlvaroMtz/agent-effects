@@ -106,7 +106,7 @@ depend on 3; tasks 6 and 7 settle after 5).
   - Check: no pre-ADR pipeline language remains; each of the seven questions maps to a named spec requirement; English only.
   - Est. lines: ~80.
 
-- [ ] 7. CI workflow + Changesets (sized explicitly here; sits outside slices 1a/1b per the proposal forecast).
+- [x] 7. CI workflow + Changesets (sized explicitly here; sits outside slices 1a/1b per the proposal forecast).
   - Files: `.github/workflows/ci.yml`, `.changeset/config.json`, `package.json` (add @changesets/cli devDependency).
   - Work: CI runs install (`pnpm install --frozen-lockfile`), typecheck (`pnpm -r typecheck`), and `pnpm -r test` on push and pull_request, using Node LTS from `.nvmrc` (design §12.4; AC12). Initialize Changesets with no version bump and no release executed in 0.0.1 (design §12.4 `changes/` row; AC13).
   - Refs: design §12.4; proposal §Delivery forecast third bullet; `docs/ROADMAP.md` 0.0.1 deliverables (CI, changesets).

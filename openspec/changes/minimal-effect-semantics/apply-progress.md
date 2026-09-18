@@ -179,9 +179,39 @@ suites themselves, the runtime and journal are the deliverable, and the concepts
 is a named acceptance criterion (AC14, AC17–AC21). `delivery_strategy` is recorded as
 `exception-ok` in `tasks.md`.
 
+## Slice 1c — Task 7 (CI + Changesets)
+
+`.github/workflows/ci.yml` runs on push and pull_request: checkout, pnpm via
+`pnpm/action-setup` (which reads the root `packageManager` pin), Node from `.nvmrc` with
+the pnpm store cached, then `pnpm install --frozen-lockfile`, `pnpm -r typecheck` and
+`pnpm -r test`. Changesets is initialized with `@changesets/cli` in the root
+devDependencies and `.changeset/config.json` on `baseBranch: main`; no version bump and no
+release run in 0.0.1.
+
+### Checks
+
+| Check | Evidence |
+|-------|----------|
+| AC1 — clean clone needs no build | `dist/` removed, then `pnpm -r test` and `pnpm -r typecheck` both exit 0 |
+| AC15 — ≥21 tests | 25 distinct (18 core, reported as 36 across the runtime and typecheck suites, plus 7 journal-memory) |
+| AC16 — no framework/CLI/database/HTTP/policy dependency | the only runtime dependency in any manifest is `@agent-effects/core` as a workspace link; devDependencies are vitest, typescript, @types/node, and @changesets/cli at the root |
+
+### Deviations (task 7)
+
+15. **`.changeset/config.json` written by hand.** `changeset init` is interactive in
+   v3.0.3 (it prompts for the GitHub changelog integration) and cannot run
+   non-interactively here. The config is the v3 default for the "no GitHub integration"
+   answer, and `pnpm exec changeset status` parses it and resolves the workspace against
+   `main`, which is the validation that matters. Its non-zero exit only reports that
+   changed packages carry no changeset, which is the intended 0.0.1 state.
+16. **CI does not run `build`.** Design §12.4 scopes the workflow to install, typecheck
+   and test, so `pnpm -r build` stays a local check. Worth adding when 0.0.2 starts
+   publishing anything.
+
 ## Remaining tasks (unchecked in tasks.md)
 
-- [ ] 7. CI workflow + Changesets (sized explicitly here; sits outside slices 1a/1b per the proposal forecast).
+None — tasks 1–7 are complete.
+
 
 ## Workload / PR boundary
 
