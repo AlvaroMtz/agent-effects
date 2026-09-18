@@ -91,5 +91,10 @@ export class JournalInvariantError extends Error {
  */
 export interface EffectJournal {
   append(entry: JournalEntryDraft): Promise<void>;
-  findResult(effectId: string): Promise<EffectResult | undefined>;
+  /**
+   * Looks a resolution up by its run-scoped address. Identity is unique
+   * within a run, not globally (ADR-0002), so `run_A/fx_1` and `run_B/fx_1`
+   * are two occurrences and both are addressable (ADR-0012 §1).
+   */
+  findResult(runId: string, effectId: string): Promise<EffectResult | undefined>;
 }

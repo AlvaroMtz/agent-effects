@@ -217,13 +217,13 @@ class FakeJournal implements EffectJournal {
     this.appended.push(entry);
   }
 
-  async findResult(effectId: string): Promise<EffectResult | undefined> {
-    return this.#recorded.get(effectId);
+  async findResult(runId: string, effectId: string): Promise<EffectResult | undefined> {
+    return this.#recorded.get(`${runId}/${effectId}`);
   }
 
   /** Seeds a result as if a previous resolution had recorded it. */
-  record(effectId: string, result: EffectResult): void {
-    this.#recorded.set(effectId, result);
+  record(runId: string, effectId: string, result: EffectResult): void {
+    this.#recorded.set(`${runId}/${effectId}`, result);
   }
 
   /** Makes `append` reject for one entry kind. */
@@ -269,7 +269,7 @@ describe("EffectRuntime.resolve", () => {
   it("resolve already-resolved effect without calling executor", async () => {
     const journal = new FakeJournal();
     const recorded: EffectResult = { effectId: "fx_1", status: "ok", output: "cloudy, 12°C" };
-    journal.record("fx_1", recorded);
+    journal.record("run_1", "fx_1", recorded);
     const executor = okExecutor();
     const runtime = createRuntime({ executor, journal });
 

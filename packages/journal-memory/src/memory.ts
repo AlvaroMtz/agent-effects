@@ -17,10 +17,10 @@ const SCHEMA_VERSION = "1.0";
  * (`specs/journal/spec.md` → Requirement: The In-Memory Backend Is
  * Process-Local).
  *
- * Convention: one instance per run (design §14). Entries are keyed by
- * `runId` so a shared instance still keeps per-run sequences separate,
- * but `findResult` takes an effect id alone, so effect ids must be unique
- * across whatever runs a single instance holds.
+ * One instance holds any number of runs: entries are keyed by `runId`,
+ * sequences are per run, and lookups are addressed by `(runId, effectId)`
+ * (ADR-0012 §1). The 0.0.1 "one journal instance per run" convention is
+ * gone; nothing depended on it except the ambiguity it hid.
  *
  * Entries are sensitive by default: nothing here filters, redacts, or
  * rewrites a payload, and no entry is ever mutated or removed once
@@ -51,21 +51,16 @@ export class MemoryEffectJournal implements EffectJournal {
   }
 
   /**
-   * Returns the result recorded for `effectId`, or `undefined` when no
-   * resolution was recorded. Never fabricates a result for an unresolved
+   * Returns the result recorded for `(runId, effectId)`, or `undefined`
+   * when no resolution was recorded in that run. Never fabricates a result for an unresolved
    * effect (`specs/journal/spec.md` → Requirement: Lookup Returns the
    * Recorded Resolution or Its Absence).
    */
-  async findResult(effectId: string): Promise<EffectResult | undefined> {
-    for (const entries of this.#runs.values()) {
-      const resolved = entries.find(
-        (entry) => entry.kind === "effect.resolved" && entry.effectId === effectId,
-      );
-      if (resolved?.kind === "effect.resolved") {
-        return resolved.result;
-      }
-    }
-    return undefined;
+  async findResult(runId: string, effectId: string): Promise<EffectResult | undefined> {
+    const resolved = (this.#runs.get(runId) ?? []).find(
+      (entry) => entry.kind === "effect.resolved" && entry.effectId === effectId,
+    );
+    return resolved?.kind === "effect.resolved" ? resolved.result : undefined;
   }
 
   /**

@@ -99,7 +99,7 @@ describe("MemoryEffectJournal", () => {
     const resolved = journal.entries(RUN)[1];
     expect(resolved).toMatchObject({ kind: "effect.resolved", result: { output } });
     // Triangulation: the same secret survives the lookup seam unredacted.
-    await expect(journal.findResult("fx_1")).resolves.toMatchObject({ output });
+    await expect(journal.findResult(RUN, "fx_1")).resolves.toMatchObject({ output });
   });
 
   it("findResult returns full result from journal", async () => {
@@ -113,9 +113,35 @@ describe("MemoryEffectJournal", () => {
     await journal.append({ kind: "effect.requested", runId: RUN, effectId: "fx_1" });
     await journal.append({ kind: "effect.resolved", runId: RUN, effectId: "fx_1", result });
 
-    await expect(journal.findResult("fx_1")).resolves.toEqual(result);
+    await expect(journal.findResult(RUN, "fx_1")).resolves.toEqual(result);
     // Absence is reported, never fabricated.
-    await expect(journal.findResult("fx_unknown")).resolves.toBeUndefined();
+    await expect(journal.findResult(RUN, "fx_unknown")).resolves.toBeUndefined();
+  });
+
+  it("scopes lookup by run so an effect id can repeat across runs", async () => {
+    const journal = new MemoryEffectJournal();
+    for (const [runId, output] of [
+      ["run_A", "sunny in A"],
+      ["run_B", "raining in B"],
+    ] as const) {
+      await journal.append({ kind: "effect.requested", runId, effectId: "fx_1" });
+      await journal.append({
+        kind: "effect.resolved",
+        runId,
+        effectId: "fx_1",
+        result: { effectId: "fx_1", status: "ok", output },
+      });
+    }
+
+    // ADR-0002 scopes identity per run, so both occurrences are legitimate
+    // and neither shadows the other.
+    await expect(journal.findResult("run_A", "fx_1")).resolves.toMatchObject({
+      output: "sunny in A",
+    });
+    await expect(journal.findResult("run_B", "fx_1")).resolves.toMatchObject({
+      output: "raining in B",
+    });
+    await expect(journal.findResult("run_C", "fx_1")).resolves.toBeUndefined();
   });
 
   it("is process-local: a new instance starts empty", async () => {
@@ -124,6 +150,6 @@ describe("MemoryEffectJournal", () => {
 
     const second = new MemoryEffectJournal();
     expect(second.entries(RUN)).toEqual([]);
-    await expect(second.findResult("fx_1")).resolves.toBeUndefined();
+    await expect(second.findResult(RUN, "fx_1")).resolves.toBeUndefined();
   });
 });

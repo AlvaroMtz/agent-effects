@@ -52,7 +52,7 @@ export function createRuntime(config: {
         );
       }
 
-      const recorded = await journal.findResult(effect.id);
+      const recorded = await journal.findResult(effect.runId, effect.id);
       if (recorded !== undefined) {
         return recorded;
       }
