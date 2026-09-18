@@ -1,0 +1,4 @@
+{"kind":"run.started","runId":"run_2","sequence":1,"schemaVersion":"1.0","timestamp":"2026-01-01T10:00:00.000Z"}
+{"kind":"effect.requested","runId":"run_2","sequence":2,"schemaVersion":"1.0","timestamp":"2026-01-01T10:00:00.100Z","effect":{"id":"fx_1","runId":"run_2","type":"tool.invoke","input":{"tool":"charge","arguments":{"amount":4200}}}}
+{"kind":"effect.resolved","runId":"run_2","sequence":3,"schemaVersion":"1.0","timestamp":"2026-01-01T10:00:03.000Z","effectId":"fx_1","result":{"effectId":"fx_1","status":"error","error":{"code":"execution-failed","message":"provider unreachable","retryable":true}}}
+{"kind":"run.failed","runId":"run_2","sequence":4,"schemaVersion":"1.0","timestamp":"2026-01-01T10:00:03.100Z","error":{"code":"run-failed","message":"the run stopped after a failed payment"}}
