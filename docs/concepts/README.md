@@ -183,6 +183,37 @@ threat model.
 
 *Journal Specification → Requirement: Entries Are Sensitive by Default.*
 
+## What a journal looks like on disk
+
+A JSONL journal is one entry per line, in append order:
+
+```jsonl
+{"kind":"run.started","runId":"run_1","sequence":1,"schemaVersion":"1.0","timestamp":"2026-01-01T09:00:00.000Z"}
+{"kind":"effect.requested","runId":"run_1","sequence":2,...,"effect":{"id":"fx_1","runId":"run_1","type":"tool.invoke","input":{"tool":"weather","arguments":{"city":"Madrid"}}}}
+{"kind":"effect.resolved","runId":"run_1","sequence":3,...,"effectId":"fx_1","result":{"effectId":"fx_1","status":"ok","output":{"temperature":24}}}
+{"kind":"run.completed","runId":"run_1","sequence":6,...}
+```
+
+The format is that plain on purpose: `cat run.jsonl` has to be useful to a
+human, and a recorded request has to say what was attempted, not merely that
+something was. The normative shape is `schemas/journal-entry.schema.json`, and
+`fixtures/journal/` pins it for implementations in any language.
+
+A fifth entry kind, `run.failed`, records a run that ended without completing.
+No component writes the run-lifecycle entries yet: `createRuntime` is
+synchronous and never receives a run id, so starting and ending a run stays the
+caller's to record.
+
+## Reading a journal written by someone else
+
+Every entry carries the `schemaVersion` its writer used. A reader **accepts
+unknown fields within the same major version** and must not fail on them —
+that is what makes additive growth possible — and **refuses a different major**
+with an error naming both the observed and the supported version. Additions
+bump the minor; removals, renames and meaning changes bump the major.
+
+*ADR-0009.*
+
 ## Conventions
 
 - **A journal is addressed by `(runId, effectId)`.** Identity is unique within a
