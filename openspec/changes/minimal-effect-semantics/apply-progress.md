@@ -66,9 +66,46 @@ Native `gentle-ai.sdd-status` v2 consumed before work: `changeName: minimal-effe
 7. **Module-private entry interfaces**: `RunStartedEntry` etc. are not exported from `journal.ts` (design §5.3 sketch omits `export`); consumers name the `JournalEntry` union. `runId` lives once on `JournalEnvelope` (the sketch's per-entry repeat is an identical redundant redeclaration).
 8. **Tool versions**: `typescript ^5.9.3` (mature 5.x line rather than the brand-new TS 7.0.2 major) chosen for vitest-typecheck compatibility; `vitest ^5.0.1`; `@types/node ^22.20.3` matching the engines pin. No version was mandated by the artifacts.
 
+## Slice 1b — Task 4 (`@agent-effects/journal-memory`)
+
+Branch: `feat/minimal-effect-semantics-1b`. Implemented directly (no SDD phase agent) at the user's explicit request in this session; the artifacts stay the plan of record.
+
+| Phase | Command | Result |
+|-------|---------|--------|
+| RED | `pnpm -r test` | exit 1 — `Cannot find module './memory.js'`; the 7 journal tests cannot run |
+| GREEN | `pnpm -r test` | exit 0 — 31 passed (24 core incl. typecheck suites + 7 journal-memory) |
+| GREEN | `pnpm -r typecheck` | exit 0 |
+| GREEN | `pnpm -r build` | exit 0 |
+
+TRIANGULATE and REFACTOR ran inside the same cycle: all four entry kinds appended in
+lifecycle order, a second run asserting the per-run counter scope, a writer that stays
+usable after a rejected duplicate, and a secret-like payload round-tripped through both
+`entries()` and `findResult`; the two invariants live in named guards
+(`rejectDuplicateEffectId`, `rejectMissingRequest`).
+
+### Deviations (task 4)
+
+9. **`JournalEntryDraft` added to core; `EffectJournal.append` now takes it.** Design §5.3
+   declares `append(entry: JournalEntry)`, which forces the caller to supply `sequence`,
+   `schemaVersion` and `timestamp` — while §6.3 step 4, ADR-0003 and ADR-0009 require the
+   *writer* to assign exactly those three at append time. The two cannot both hold. The
+   spec side wins: `JournalEntryDraft` is `JournalEntry` minus the three writer-assigned
+   envelope fields, and `JournalEntry` stays the stored/read shape. Public surface is now
+   19 names (AC2 said 18); task 5's runtime consumes the draft type instead of forging a
+   sequence it has no counter for.
+10. **Workspace resolution from source.** Both manifests expose `exports` -> `./src/index.ts`
+   with a `publishConfig` block that rewrites `main`/`types`/`exports` to `dist` on publish
+   (nothing is published in 0.0.1). This keeps a clean clone green under
+   `pnpm install && pnpm -r test` with no build step, which AC1 requires and which a
+   `dist`-only exports map would break in CI (task 7 runs install -> typecheck -> test).
+11. **`MemoryEffectJournal.entries(runId)` reader.** Not in design §6.3's two-method sketch,
+   but `specs/journal/spec.md` -> Requirement "Append-Only Source of Truth" specifies that
+   earlier entries are readable unchanged in append order, and tests #9, #10 and #12 assert
+   on stamped envelope fields that `findResult` does not expose. It is additive to
+   `EffectJournal`, which journal-memory still implements as declared.
+
 ## Remaining tasks (unchecked in tasks.md)
 
-- [ ] 4. @agent-effects/journal-memory — MemoryEffectJournal with append-time invariants (strict TDD inside this task).
 - [ ] 5. Runtime — createRuntime/resolve journal-first pipeline + mandatory example (strict TDD inside this task).
 - [ ] 6. Rewrite docs/concepts/README.md — exit-criteria answers and ADR-locked wording (docs ship inside slice 1b with the behavior; non-code task).
 - [ ] 7. CI workflow + Changesets (sized explicitly here; sits outside slices 1a/1b per the proposal forecast).

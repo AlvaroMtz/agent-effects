@@ -78,7 +78,7 @@ depend on 3; tasks 6 and 7 settle after 5).
   - Check: `pnpm -r test` green including #19; `pnpm -r typecheck` green.
   - Est. lines: ~80.
 
-- [ ] 4. @agent-effects/journal-memory — MemoryEffectJournal with append-time invariants (strict TDD inside this task).
+- [x] 4. @agent-effects/journal-memory — MemoryEffectJournal with append-time invariants (strict TDD inside this task).
   - Files: `packages/journal-memory/package.json`, `packages/journal-memory/tsconfig.json`, `packages/journal-memory/src/memory.test.ts` (new), `packages/journal-memory/src/memory.ts`, `packages/journal-memory/src/index.ts`.
   - Scaffold: package manifest (ESM, strict, vitest) with a workspace dependency on `@agent-effects/core` only (design §12.3; dependency direction journal-memory → core only, design §14).
   - RED: write tests #7 `append effect.resolved without prior request rejects` (assert JournalInvariantError code `missing-request`), #8 `append duplicate effect.requested rejects` (code `duplicate-effect-id`), #9 `sequence increases with each append`, #10 `every entry carries schemaVersion at creation` (value `"1.0"`), #12 `entries with secret-like values stored verbatim`, #18 `findResult returns full result from journal` (design §13.3 rows 7–10, 12, 18) → module missing, `pnpm -r test` fails; record RED evidence.
